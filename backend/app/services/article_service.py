@@ -108,7 +108,7 @@ async def generate_game_preview(
     recent_str = "\n".join([f"- {g.get('home_team','')} {g.get('home_score',0)} – {g.get('away_score',0)} {g.get('away_team','')}" for g in recent if g.get("home_score") is not None]) or "N/A"
     stats_str = "\n".join([f"- {s.get('player_name','?')}: {s.get('games_played',0)}G, AVG {s.get('avg','?')}, HR {s.get('home_runs','?')}, RBI {s.get('rbi','?')}" for s in top_stats[:5]]) or "N/A"
 
-    prompt = f"""You are an expert MLB analyst writing for RedsHub, a Cincinnati Reds fan betting dashboard.
+    prompt = f"""You are an expert MLB sabermetrics analyst writing for RedsHub, a Cincinnati Reds fan betting dashboard. You are deeply versed in advanced baseball analytics and use them to inform every prediction.
 
 Generate a comprehensive game prediction article for:
 {TEAM_NAME} ({location}) vs {opp_name}
@@ -130,12 +130,12 @@ Key Reds batting stats:
 {stats_str}
 
 Write a 500-700 word analysis covering:
-1. Pitching matchup (starting pitchers, recent form)
-2. Offensive outlook for both teams
-3. Bullpen and lineup considerations
-4. Run line analysis (Reds {spread})
-5. Over/under analysis ({over_under} runs)
-6. Final pick with confidence level
+1. Starting pitcher matchup — reference ERA+, FIP, WHIP, K/9, and recent starts. Mention how each starter's FIP compares to their ERA (luck vs. skill).
+2. Offensive outlook — reference wOBA, OPS+, hard hit rate, barrel rate, and BABIP trends for key hitters on both sides.
+3. Bullpen analysis — mention bullpen ERA, leverage performance, and high-leverage reliever availability.
+4. Run line analysis (Reds {spread}) — factor in fWAR-based team strength, home field advantage (~54% in MLB), and starting pitcher quality differential.
+5. Over/under analysis ({over_under} runs) — consider park factors, weather if relevant, and both teams' run-scoring trends.
+6. Final pick with confidence level.
 
 End with a JSON block EXACTLY like this (no markdown):
 PICKS_JSON_START
@@ -148,7 +148,7 @@ PICKS_JSON_START
 }}
 PICKS_JSON_END
 
-Use markdown headers (##) for sections. Write with conviction."""
+Use markdown headers (##) for sections. Write with conviction and cite specific sabermetric stats throughout."""
 
     content = await _call_claude(prompt, max_tokens=1400)
     picks   = _extract_picks(content)
@@ -184,7 +184,7 @@ async def generate_best_bet(
     if forced_total_lean:
         force_note = f"\nIMPORTANT: The total lean MUST be {forced_total_lean} (consistent with prediction article)."
 
-    prompt = f"""You are a sharp MLB betting analyst for RedsHub.
+    prompt = f"""You are a sharp MLB betting analyst for RedsHub who leverages advanced sabermetrics to find edges.
 
 Give your single strongest best bet for:
 {TEAM_NAME} vs {opp_name} on {game_date}
@@ -192,7 +192,7 @@ Run Line (Reds): {spread} | Moneyline: {moneyline} | Total: {over_under}
 {force_note}
 
 Choose ONE of: Run Line, Moneyline, or Over/Under.
-Write 300-400 words explaining exactly why this is the best bet.
+Write 300-400 words explaining exactly why this is the best bet. Back your argument with sabermetric reasoning — reference fWAR, FIP vs ERA gaps, wOBA splits, OPS+ against LHP/RHP, bullpen leverage stats, BABIP regression, hard hit rate, barrel rate, or park factors as relevant.
 
 End with PICKS_JSON_START
 {{
@@ -259,16 +259,17 @@ async def generate_player_prop(
         prop_instruction = (
             f"This is a STARTING PITCHER prop. Focus on STRIKEOUTS (K's).\n"
             f"Pick a strikeout prop (e.g., Over/Under 5.5 strikeouts).\n"
-            f"Analyze the opposing lineup's strikeout rate, the pitcher's K/9, "
-            f"and recent start history."
+            f"Analyze the opposing lineup's strikeout rate (K%), the pitcher's K/9 and SwStr%, "
+            f"recent start history, and FIP vs ERA to gauge true skill level."
         )
     else:
         prop_instruction = (
             "Pick ONE prop (hits O/U, home run, strikeouts, RBI, total bases).\n"
-            "State the line clearly and argue OVER or UNDER with conviction."
+            "State the line clearly and argue OVER or UNDER with conviction.\n"
+            "Reference wOBA, hard hit rate, barrel rate, BABIP trends, or platoon splits as relevant."
         )
 
-    prompt = f"""You are a sharp MLB prop analyst for RedsHub.
+    prompt = f"""You are a sharp MLB prop analyst for RedsHub who uses sabermetrics to find edges.
 
 Write a 300-400 word prop bet analysis for {player} ({TEAM_NAME}) against {opp} on {game_date}.
 {stat_str}
