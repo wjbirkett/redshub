@@ -77,8 +77,13 @@ async def get_results():
     db = get_supabase()
     if not db:
         return {"predictions": [], "props": []}
-    pred  = db.table("prediction_results").select("*").order("game_date", desc=True).execute()
-    props = db.table("prop_results").select("*").order("game_date", desc=True).execute()
+    # Filter to Reds games only (shared Supabase DB with KnicksHub)
+    pred  = db.table("prediction_results").select("*").or_(
+        "home_team.ilike.%Reds%,away_team.ilike.%Reds%,home_team.ilike.%Cincinnati%,away_team.ilike.%Cincinnati%"
+    ).order("game_date", desc=True).execute()
+    props = db.table("prop_results").select("*").or_(
+        "home_team.ilike.%Reds%,away_team.ilike.%Reds%,home_team.ilike.%Cincinnati%,away_team.ilike.%Cincinnati%"
+    ).order("game_date", desc=True).execute()
     return {"predictions": pred.data or [], "props": props.data or []}
 
 @router.get("/odds")
