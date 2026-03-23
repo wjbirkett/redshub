@@ -15,10 +15,10 @@ const SOURCES = [
   { id: "cbs",       label: "CBS Sports" },
 ];
 
+import { useState } from "react";
+
 export default function NewsPage() {
-  const [source, setSource] = window.React?.useState
-    ? window.React.useState(undefined)
-    : [undefined, () => {}];
+  const [source, setSource] = useState(undefined);
 
   const { data: news, isLoading } = useQuery({
     queryKey: ["news", source],
