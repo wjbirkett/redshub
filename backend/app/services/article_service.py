@@ -43,7 +43,7 @@ async def get_articles(limit: int = 20):
     db = get_supabase()
     if not db:
         return []
-    # Filter to Reds articles only (shared Supabase DB with KnicksHub)
+    # Filter to Reds articles only
     result = db.table("articles").select("*").or_("home_team.ilike.%Reds%,away_team.ilike.%Reds%,home_team.ilike.%Cincinnati%,away_team.ilike.%Cincinnati%").order("game_date", desc=True).limit(limit).execute()
     return result.data or []
 
