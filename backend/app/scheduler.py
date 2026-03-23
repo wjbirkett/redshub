@@ -41,7 +41,7 @@ def generate_article(force: bool = False):
         generate_game_preview, generate_best_bet, generate_daily_props,
         save_article, get_article_by_slug, slugify, PROP_PLAYERS,
     )
-    from app.services.mlb_service import fetch_schedule, fetch_injury_report, fetch_player_stats
+    from app.services.mlb_service import fetch_schedule, fetch_injury_report, fetch_player_stats, fetch_probable_pitcher
     from app.services.odds_service import fetch_reds_lines
     import httpx
 
@@ -53,7 +53,7 @@ def generate_article(force: bool = False):
             today   = date.today()
             now_utc = datetime.now(timezone.utc)
 
-            # Find today's game + tip-off time via ESPN
+            # Find today's game + first pitch time via ESPN
             url = f"{ESPN_BASE}/teams/{REDS_ESPN_ID}/schedule"
             try:
                 async with httpx.AsyncClient(timeout=15) as client:
@@ -142,6 +142,10 @@ def generate_article(force: bool = False):
             await save_article(bb)
 
             active = [p for p in PROP_PLAYERS if not any(p.split()[-1].lower() in i.get("player_name","").lower() and "out" in i.get("status","").lower() for i in injuries)]
+            # Add probable starting pitcher for strikeout props
+            starter = await fetch_probable_pitcher(next_game["home_team"], next_game["away_team"])
+            if starter and starter not in active:
+                active.append(starter)
             props  = await generate_daily_props(next_game["home_team"], next_game["away_team"], gd, active, over_under, injuries, top_st)
             for prop in props:
                 await save_article(prop)
