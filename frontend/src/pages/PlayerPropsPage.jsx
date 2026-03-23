@@ -2,6 +2,7 @@ import { useQuery } from "@tanstack/react-query";
 import { Link } from "react-router-dom";
 import { Helmet } from "react-helmet-async";
 import { getArticles, getResults } from "../utils/api";
+import { getPlayerImage } from "../utils/playerImages";
 
 const S = {
   surface: "#1a1a1a", surfaceHigh: "#242424",
@@ -101,7 +102,10 @@ export default function PlayerPropsPage() {
                   onMouseEnter={e => (e.currentTarget.style.borderColor = S.red)}
                   onMouseLeave={e => (e.currentTarget.style.borderColor = S.border)}
                 >
-                  <span style={{ fontFamily: "Space Grotesk, sans-serif", fontWeight: 700, fontSize: "0.875rem", color: S.text }}>{name}</span>
+                  <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
+                    <img src={getPlayerImage(name)} alt={name} style={{ width: 28, height: 28, borderRadius: "50%", objectFit: "cover", border: "2px solid #C6011F", flexShrink: 0 }} onError={e => { e.target.src = "https://a.espncdn.com/combiner/i?img=/i/headshots/nophoto.png&w=200&h=146"; }} />
+                    <span style={{ fontFamily: "Space Grotesk, sans-serif", fontWeight: 700, fontSize: "0.875rem", color: S.text }}>{name}</span>
+                  </div>
                   {total > 0 ? (
                     <span style={{ background: good ? S.greenBg : S.missBg, color: good ? S.hitGreen : "#ffdad6", padding: "0.125rem 0.5rem", fontFamily: "Space Grotesk, sans-serif", fontWeight: 900, fontSize: "0.625rem", textTransform: "uppercase", borderRadius: "999px" }}>
                       {hits}-{total - hits}

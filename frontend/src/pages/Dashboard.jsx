@@ -2,6 +2,7 @@ import { useQuery } from "@tanstack/react-query";
 import { Link } from "react-router-dom";
 import { Helmet } from "react-helmet-async";
 import { getNews, getInjuries, getBirthdays, getSchedule, getStandings, getArticles, getResults } from "../utils/api";
+import { getPlayerImage } from "../utils/playerImages";
 
 // Reds design tokens
 const S = {
@@ -485,9 +486,17 @@ export default function Dashboard() {
             <div style={{ display: "flex", flexDirection: "column", gap: "1rem" }}>
               {redsInj.length > 0 ? redsInj.map((inj, i) => (
                 <div key={i} style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
-                  <div>
-                    <span style={{ display: "block", fontWeight: 700, fontSize: "0.875rem", color: S.text }}>{inj.player_name || inj.name}</span>
-                    <span style={{ fontSize: "0.625rem", color: S.textMuted, textTransform: "uppercase" }}>{inj.reason || inj.injury}</span>
+                  <div style={{ display: "flex", alignItems: "center", gap: "0.625rem" }}>
+                    <img
+                      src={getPlayerImage(inj.player_name || inj.name)}
+                      alt={inj.player_name || inj.name}
+                      style={{ width: 36, height: 36, borderRadius: "50%", objectFit: "cover", border: "2px solid #C6011F", flexShrink: 0 }}
+                      onError={e => { e.target.src = "https://a.espncdn.com/combiner/i?img=/i/headshots/nophoto.png&w=200&h=146"; }}
+                    />
+                    <div>
+                      <span style={{ display: "block", fontWeight: 700, fontSize: "0.875rem", color: S.text }}>{inj.player_name || inj.name}</span>
+                      <span style={{ fontSize: "0.625rem", color: S.textMuted, textTransform: "uppercase" }}>{inj.reason || inj.injury}</span>
+                    </div>
                   </div>
                   <span style={{
                     background: (inj.status || "").toLowerCase().includes("out") ? S.missBg : S.surfaceHighest,
@@ -516,6 +525,12 @@ export default function Dashboard() {
               </div>
               {bdays.map((b, i) => (
                 <div key={i} style={{ display: "flex", alignItems: "center", gap: "0.75rem", opacity: i > 0 ? 0.5 : 1, paddingTop: i > 0 ? "0.75rem" : 0, borderTop: i > 0 ? `1px solid ${S.border}` : "none", marginTop: i > 0 ? "0.75rem" : 0 }}>
+                  <img
+                    src={getPlayerImage(b.player_name)}
+                    alt={b.player_name}
+                    style={{ width: 36, height: 36, borderRadius: "50%", objectFit: "cover", border: "2px solid #C6011F", flexShrink: 0 }}
+                    onError={e => { e.target.src = "https://a.espncdn.com/combiner/i?img=/i/headshots/nophoto.png&w=200&h=146"; }}
+                  />
                   <div>
                     <span style={{ display: "block", fontWeight: 700, fontSize: "0.875rem", color: S.text }}>{b.player_name}</span>
                     <span style={{ fontSize: "0.625rem", color: S.red, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.15em" }}>

@@ -1,6 +1,7 @@
 import { useQuery } from "@tanstack/react-query";
 import { Helmet } from "react-helmet-async";
 import { getStats } from "../utils/api";
+import { getPlayerImage } from "../utils/playerImages";
 
 const S = {
   surface: "#1a1a1a", surfaceHigh: "#242424", border: "rgba(255,255,255,0.08)",
@@ -50,7 +51,12 @@ export default function StatsPage() {
               <tbody>
                 {batters.map((p, i) => (
                   <tr key={i} style={{ borderBottom: `1px solid ${S.border}` }}>
-                    <td style={{ padding: "0.625rem 0.75rem", fontFamily: "Space Grotesk, sans-serif", fontWeight: 700, fontSize: "0.875rem", color: S.text }}>{p.player_name}</td>
+                    <td style={{ padding: "0.625rem 0.75rem", fontFamily: "Space Grotesk, sans-serif", fontWeight: 700, fontSize: "0.875rem", color: S.text }}>
+                      <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
+                        <img src={getPlayerImage(p.player_name)} alt={p.player_name} style={{ width: 28, height: 28, borderRadius: "50%", objectFit: "cover", border: "2px solid #C6011F", flexShrink: 0 }} onError={e => { e.target.src = "https://a.espncdn.com/combiner/i?img=/i/headshots/nophoto.png&w=200&h=146"; }} />
+                        {p.player_name}
+                      </div>
+                    </td>
                     <TD>{p.games_played}</TD>
                     <TD highlight>{p.avg?.toFixed(3) ?? p.batting_avg?.toFixed(3)}</TD>
                     <TD>{p.home_runs ?? p.hr}</TD>
@@ -82,7 +88,12 @@ export default function StatsPage() {
               <tbody>
                 {pitchers.map((p, i) => (
                   <tr key={i} style={{ borderBottom: `1px solid ${S.border}` }}>
-                    <td style={{ padding: "0.625rem 0.75rem", fontFamily: "Space Grotesk, sans-serif", fontWeight: 700, fontSize: "0.875rem", color: S.text }}>{p.player_name}</td>
+                    <td style={{ padding: "0.625rem 0.75rem", fontFamily: "Space Grotesk, sans-serif", fontWeight: 700, fontSize: "0.875rem", color: S.text }}>
+                      <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
+                        <img src={getPlayerImage(p.player_name)} alt={p.player_name} style={{ width: 28, height: 28, borderRadius: "50%", objectFit: "cover", border: "2px solid #C6011F", flexShrink: 0 }} onError={e => { e.target.src = "https://a.espncdn.com/combiner/i?img=/i/headshots/nophoto.png&w=200&h=146"; }} />
+                        {p.player_name}
+                      </div>
+                    </td>
                     <TD>{p.games_played}</TD>
                     <TD highlight>{p.era?.toFixed(2)}</TD>
                     <TD>{p.wins != null ? `${p.wins}-${p.losses}` : "—"}</TD>

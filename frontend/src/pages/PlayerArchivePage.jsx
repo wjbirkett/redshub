@@ -2,6 +2,7 @@ import { useQuery } from "@tanstack/react-query";
 import { useParams, Link } from "react-router-dom";
 import { Helmet } from "react-helmet-async";
 import { getArticles, getResults } from "../utils/api";
+import { getPlayerImage } from "../utils/playerImages";
 
 const S = {
   surface: "#1a1a1a", surfaceHigh: "#242424",
@@ -42,9 +43,12 @@ export default function PlayerArchivePage() {
       </Link>
 
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: "1rem", marginBottom: "1.5rem" }}>
-        <h2 style={{ fontFamily: "Space Grotesk, sans-serif", fontWeight: 900, fontSize: "1.75rem", textTransform: "uppercase", fontStyle: "italic", color: S.text }}>
-          {displayName}
-        </h2>
+        <div style={{ display: "flex", alignItems: "center", gap: "0.75rem" }}>
+          <img src={getPlayerImage(displayName)} alt={displayName} style={{ width: 48, height: 48, borderRadius: "50%", objectFit: "cover", border: "2px solid #C6011F", flexShrink: 0 }} onError={e => { e.target.src = "https://a.espncdn.com/combiner/i?img=/i/headshots/nophoto.png&w=200&h=146"; }} />
+          <h2 style={{ fontFamily: "Space Grotesk, sans-serif", fontWeight: 900, fontSize: "1.75rem", textTransform: "uppercase", fontStyle: "italic", color: S.text }}>
+            {displayName}
+          </h2>
+        </div>
         {total > 0 && (
           <div style={{ textAlign: "center" }}>
             <span style={{ display: "block", fontFamily: "Space Grotesk, sans-serif", fontWeight: 900, fontSize: "2rem", color: good ? S.green : S.missRed }}>
