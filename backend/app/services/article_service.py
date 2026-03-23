@@ -13,11 +13,11 @@ SPORT          = "MLB"
 RUN_LINE_LABEL = "run line"
 PROP_TYPES     = ["hits", "home runs", "strikeouts", "RBI", "total bases"]
 
-# Key Reds players for prop articles
+# Key Reds BATTERS for prop articles (position players only — no pitchers)
 PROP_PLAYERS = [
     "Elly De La Cruz", "TJ Friedl", "Spencer Steer",
     "Tyler Stephenson", "Jonathan India", "Jake Fraley",
-    "Hunter Greene", "Nick Lodolo", "Graham Ashcraft",
+    "Jeimer Candelario", "Stuart Fairchild", "Santiago Espinal",
 ]
 
 
