@@ -43,6 +43,10 @@ class SupabaseTable:
         self._filters[col] = f"eq.{val}"
         return self
 
+    def or_(self, conditions: str):
+        self._filters["or"] = f"({conditions})"
+        return self
+
     def order(self, col, desc=False):
         self._order = col
         self._desc = desc
