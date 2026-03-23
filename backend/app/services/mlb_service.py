@@ -1,6 +1,6 @@
 import asyncio, httpx, logging
-from datetime import datetime, date
-from typing import List
+from datetime import datetime, date, timedelta
+from typing import List, Optional
 from app.models.schemas import InjuryReport, Game, TeamStanding, PlayerStat
 
 logger = logging.getLogger(__name__)
@@ -325,3 +325,68 @@ async def fetch_recent_games(last_n: int = 5) -> List[Game]:
     games    = await fetch_schedule()
     finished = [g for g in games if g.status == "Final"]
     return finished[-last_n:] if finished else []
+
+
+# ── Probable Pitcher Detection ────────────────────────────────────────────────
+
+async def fetch_probable_pitcher(home_team: str, away_team: str) -> Optional[str]:
+    """
+    Fetch the Reds' probable starting pitcher from the ESPN scoreboard.
+    Checks today and tomorrow. Returns the pitcher's displayName or None.
+    """
+    today    = date.today()
+    tomorrow = today + timedelta(days=1)
+    scoreboard_url = f"{ESPN_BASE}/scoreboard"
+
+    try:
+        async with httpx.AsyncClient(timeout=15) as client:
+            for check_date in [today, tomorrow]:
+                ds = check_date.strftime("%Y%m%d")
+                resp = await client.get(f"{scoreboard_url}?dates={ds}")
+                if resp.status_code != 200:
+                    continue
+                data = resp.json()
+
+                for event in data.get("events", []):
+                    comp = event.get("competitions", [{}])[0]
+                    competitors = comp.get("competitors", [])
+                    team_ids = [c.get("team", {}).get("id") for c in competitors]
+
+                    if REDS_ESPN_ID not in team_ids:
+                        continue
+
+                    # Found a Reds game — look for probable pitchers
+                    for competitor in competitors:
+                        tid = competitor.get("team", {}).get("id")
+                        if tid != REDS_ESPN_ID:
+                            continue
+                        # ESPN puts probable pitchers in "probables" array
+                        probables = competitor.get("probables", [])
+                        for prob in probables:
+                            athlete = prob.get("athlete", {})
+                            name = athlete.get("displayName")
+                            if name:
+                                logger.info(f"Probable Reds starter found: {name}")
+                                return name
+
+                    # Also check the top-level "competitions[0].startingLineups"
+                    # or "status" fields for pitcher info
+                    for competitor in competitors:
+                        tid = competitor.get("team", {}).get("id")
+                        if tid != REDS_ESPN_ID:
+                            continue
+                        # Some ESPN responses nest pitchers differently
+                        leaders = competitor.get("leaders", [])
+                        for leader_group in leaders:
+                            if leader_group.get("abbreviation") == "SP":
+                                for ldr in leader_group.get("leaders", []):
+                                    name = ldr.get("athlete", {}).get("displayName")
+                                    if name:
+                                        logger.info(f"Probable Reds starter (from leaders): {name}")
+                                        return name
+
+        logger.info("No probable Reds pitcher found in ESPN scoreboard")
+        return None
+    except Exception as e:
+        logger.error(f"Probable pitcher fetch failed: {e}")
+        return None

@@ -232,13 +232,41 @@ async def generate_player_prop(
     player_stats: dict, injuries: list, top_stats: list, over_under: str,
 ) -> dict:
     stat_str = ""
+    is_pitcher = False
     if player_stats:
-        stat_str = (
-            f"Season stats: AVG {player_stats.get('avg','?')}, "
-            f"HR {player_stats.get('home_runs','?')}, RBI {player_stats.get('rbi','?')}, "
-            f"OPS {player_stats.get('ops','?')}, G {player_stats.get('games_played','?')}"
-        )
+        # Detect if this is a pitcher based on stats
+        if player_stats.get("era") is not None or player_stats.get("innings_pitched") is not None:
+            is_pitcher = True
+            stat_str = (
+                f"Season stats: ERA {player_stats.get('era','?')}, "
+                f"SO {player_stats.get('strikeouts','?')}, WHIP {player_stats.get('whip','?')}, "
+                f"IP {player_stats.get('innings_pitched','?')}, W-L {player_stats.get('wins','?')}-{player_stats.get('losses','?')}"
+            )
+        else:
+            stat_str = (
+                f"Season stats: AVG {player_stats.get('avg','?')}, "
+                f"HR {player_stats.get('home_runs','?')}, RBI {player_stats.get('rbi','?')}, "
+                f"OPS {player_stats.get('ops','?')}, G {player_stats.get('games_played','?')}"
+            )
+    else:
+        # If no stats found but player is not in PROP_PLAYERS, likely a pitcher
+        if player not in PROP_PLAYERS:
+            is_pitcher = True
+
     opp = away_team if "Reds" in home_team or "Cincinnati" in home_team else home_team
+
+    if is_pitcher:
+        prop_instruction = (
+            f"This is a STARTING PITCHER prop. Focus on STRIKEOUTS (K's).\n"
+            f"Pick a strikeout prop (e.g., Over/Under 5.5 strikeouts).\n"
+            f"Analyze the opposing lineup's strikeout rate, the pitcher's K/9, "
+            f"and recent start history."
+        )
+    else:
+        prop_instruction = (
+            "Pick ONE prop (hits O/U, home run, strikeouts, RBI, total bases).\n"
+            "State the line clearly and argue OVER or UNDER with conviction."
+        )
 
     prompt = f"""You are a sharp MLB prop analyst for RedsHub.
 
@@ -246,13 +274,12 @@ Write a 300-400 word prop bet analysis for {player} ({TEAM_NAME}) against {opp} 
 {stat_str}
 Game total: {over_under}
 
-Pick ONE prop (hits O/U, home run, strikeouts, RBI, total bases).
-State the line clearly and argue OVER or UNDER with conviction.
+{prop_instruction}
 
 End with PICKS_JSON_START
 {{
-  "prop_type": "e.g. Hits",
-  "prop_line": "e.g. Over 1.5 Hits",
+  "prop_type": "e.g. Strikeouts",
+  "prop_line": "e.g. Over 5.5 Strikeouts",
   "prop_lean": "OVER or UNDER",
   "confidence": "High or Medium or Low"
 }}

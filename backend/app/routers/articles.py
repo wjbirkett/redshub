@@ -10,7 +10,7 @@ from app.services.article_service import (
     generate_best_bet, generate_player_prop, generate_daily_props,
     generate_history_article, generate_postgame_analysis, PROP_PLAYERS,
 )
-from app.services.mlb_service import fetch_schedule, fetch_injury_report, fetch_player_stats
+from app.services.mlb_service import fetch_schedule, fetch_injury_report, fetch_player_stats, fetch_probable_pitcher
 from app.services.odds_service import fetch_reds_lines
 
 limiter = Limiter(key_func=get_remote_address)
@@ -144,6 +144,10 @@ async def trigger_all_articles():
             bb       = await generate_best_bet(game["home_team"], game["away_team"], gd, spread, moneyline, over_under, injuries, top_st, forced_total_lean=picks.get("total_lean"), forced_total_pick=picks.get("total_pick"))
             await save_article(bb)
             active   = [p for p in PROP_PLAYERS if not any(p.split()[-1].lower() in i.get("player_name","").lower() and "out" in i.get("status","").lower() for i in injuries)]
+            # Add probable starting pitcher for strikeout props
+            starter  = await fetch_probable_pitcher(game["home_team"], game["away_team"])
+            if starter and starter not in active:
+                active.append(starter)
             props    = await generate_daily_props(game["home_team"], game["away_team"], gd, active, over_under, injuries, top_st)
             for prop in props:
                 await save_article(prop)
@@ -211,6 +215,10 @@ async def generate_for_date(game_date: str, force: bool = True):
     bb    = await generate_best_bet(game["home_team"], game["away_team"], game_date, spread, moneyline, over_under, injuries, top_st, forced_total_lean=picks.get("total_lean"), forced_total_pick=picks.get("total_pick"))
     await save_article(bb)
     active = [p for p in PROP_PLAYERS if not any(p.split()[-1].lower() in i.get("player_name","").lower() and "out" in i.get("status","").lower() for i in injuries)]
+    # Add probable starting pitcher for strikeout props
+    starter = await fetch_probable_pitcher(game["home_team"], game["away_team"])
+    if starter and starter not in active:
+        active.append(starter)
     props  = await generate_daily_props(game["home_team"], game["away_team"], game_date, active, over_under, injuries, top_st)
     for p in props:
         await save_article(p)
