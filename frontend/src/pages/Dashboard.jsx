@@ -77,6 +77,8 @@ export default function Dashboard() {
   const atsTotal = preds.filter((r) => r.spread_result).length;
   const ouHits   = preds.filter((r) => r.total_result === "HIT").length;
   const ouTotal  = preds.filter((r) => r.total_result).length;
+  const mlHits   = preds.filter((r) => r.moneyline_result === "HIT").length;
+  const mlTotal  = preds.filter((r) => r.moneyline_result).length;
   const propHits = propRes.filter((r) => r.result === "HIT").length;
 
   const opp = (a) => {
@@ -160,6 +162,14 @@ export default function Dashboard() {
                 {ouHits}-{ouTotal - ouHits}
               </span>
               <span style={{ fontSize: "0.5625rem", color: S.textMuted, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.1em" }}>O/U</span>
+            </div>
+          )}
+          {mlTotal > 0 && (
+            <div style={{ textAlign: "center" }}>
+              <span style={{ display: "block", fontFamily: "Space Grotesk, sans-serif", fontWeight: 900, fontSize: "1.4rem", color: mlHits / mlTotal >= 0.5 ? S.green : S.missRed }}>
+                {mlHits}-{mlTotal - mlHits}
+              </span>
+              <span style={{ fontSize: "0.5625rem", color: S.textMuted, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.1em" }}>ML</span>
             </div>
           )}
           {propRes.length > 0 && (
@@ -331,7 +341,7 @@ export default function Dashboard() {
             </p>
             {atsTotal > 0 && (
               <div style={{ display: "flex", gap: "2rem" }}>
-                {[["RL", atsHits, atsTotal], ["O/U", ouHits, ouTotal], ["PROPS", propHits, propRes.length]]
+                {[["RL", atsHits, atsTotal], ["O/U", ouHits, ouTotal], ["ML", mlHits, mlTotal], ["PROPS", propHits, propRes.length]]
                   .filter(([, , t]) => t > 0)
                   .map(([label, h, t]) => (
                     <div key={label}>
@@ -549,8 +559,8 @@ export default function Dashboard() {
                 AI Season Record
               </h3>
               <div style={{ display: "flex", gap: "1.5rem" }}>
-                {[[atsHits, atsTotal - atsHits, "RL"], [ouHits, ouTotal - ouHits, "O/U"], [propHits, propRes.length - propHits, "PROPS"]]
-                  .filter(([, , l]) => l === "PROPS" ? propRes.length > 0 : (l === "O/U" ? ouTotal > 0 : atsTotal > 0))
+                {[[atsHits, atsTotal - atsHits, "RL"], [ouHits, ouTotal - ouHits, "O/U"], [mlHits, mlTotal - mlHits, "ML"], [propHits, propRes.length - propHits, "PROPS"]]
+                  .filter(([, , l]) => l === "PROPS" ? propRes.length > 0 : (l === "ML" ? mlTotal > 0 : (l === "O/U" ? ouTotal > 0 : atsTotal > 0)))
                   .map(([h, m, l]) => (
                     <div key={l}>
                       <span style={{ display: "block", fontFamily: "Space Grotesk, sans-serif", fontWeight: 900, fontSize: "1.5rem", color: h / (h + m) >= 0.5 ? S.green : S.missRed }}>

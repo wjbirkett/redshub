@@ -112,7 +112,15 @@ async def resolve_game_predictions(game_date: str) -> dict:
             elif total_lean == "UNDER" and ou_line:
                 total_result = "HIT" if total < ou_line else "MISS"
 
-            if spread_result or total_result:
+            # Moneyline
+            ml_result = None
+            ml_lean = picks.get("moneyline_lean", "").upper()
+            if ml_lean in ("REDS", "WIN"):
+                ml_result = "HIT" if reds_score > opp_score else "MISS"
+            elif ml_lean in ("OPPONENT", "LOSS"):
+                ml_result = "HIT" if reds_score < opp_score else "MISS"
+
+            if spread_result or total_result or ml_result:
                 db.table("prediction_results").upsert({
                     "slug":          article["slug"],
                     "game_date":     game_date,
@@ -120,6 +128,7 @@ async def resolve_game_predictions(game_date: str) -> dict:
                     "away_team":     result["away_team"],
                     "spread_result": spread_result,
                     "total_result":  total_result,
+                    "moneyline_result": ml_result,
                 }, on_conflict="slug")
                 resolved += 1
 
