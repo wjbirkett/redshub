@@ -108,6 +108,38 @@ async def generate_game_preview(
     recent_str = "\n".join([f"- {g.get('home_team','')} {g.get('home_score',0)} – {g.get('away_score',0)} {g.get('away_team','')}" for g in recent if g.get("home_score") is not None]) or "N/A"
     stats_str = "\n".join([f"- {s.get('player_name','?')}: {s.get('games_played',0)}G, AVG {s.get('avg','?')}, HR {s.get('home_runs','?')}, RBI {s.get('rbi','?')}" for s in top_stats[:5]]) or "N/A"
 
+    # Composite scoring
+    try:
+        from app.services.scoring_service import compute_game_score
+        scoring_result = await compute_game_score(home_team, away_team, game_date, injuries)
+        scoring_block = scoring_result.get("scoring_block", "")
+    except Exception as e:
+        logger.warning(f"Scoring service failed: {e}")
+        scoring_block = ""
+
+    # ML prediction
+    try:
+        from app.services.ml_scoring_service import predict_game
+        ml_result = await predict_game(home_team, away_team, over_under)
+        ml_block = ml_result.get("ml_block", "")
+    except Exception as e:
+        logger.warning(f"ML prediction failed: {e}")
+        ml_block = ""
+
+    # Advanced matchup stats
+    try:
+        from app.services.advanced_stats_service import get_matchup_stats, format_matchup_block, get_probable_pitchers
+        matchup = await get_matchup_stats("Cincinnati Reds", opp_name)
+        matchup_block = format_matchup_block(matchup, opp_name)
+        pitchers = await get_probable_pitchers(game_date)
+        pitcher_block = ""
+        if pitchers:
+            pitcher_block = f"Probable Starters:\n  Reds SP: {pitchers.get('reds_sp', 'TBD')}\n  {opp_name} SP: {pitchers.get('opp_sp', 'TBD')}"
+    except Exception as e:
+        logger.warning(f"Advanced stats failed: {e}")
+        matchup_block = ""
+        pitcher_block = ""
+
     prompt = f"""You are an expert MLB sabermetrics analyst writing for RedsHub, a Cincinnati Reds fan betting dashboard. You are deeply versed in advanced baseball analytics and use them to inform every prediction.
 
 Generate a comprehensive game prediction article for:
@@ -129,6 +161,14 @@ Recent results:
 Key Reds batting stats:
 {stats_str}
 
+{pitcher_block}
+
+{matchup_block}
+
+{scoring_block}
+
+{ml_block}
+
 Write a 500-700 word analysis covering:
 1. Starting pitcher matchup — reference ERA+, FIP, WHIP, K/9, and recent starts. Mention how each starter's FIP compares to their ERA (luck vs. skill).
 2. Offensive outlook — reference wOBA, OPS+, hard hit rate, barrel rate, and BABIP trends for key hitters on both sides.
@@ -136,6 +176,9 @@ Write a 500-700 word analysis covering:
 4. Run line analysis (Reds {spread}) — factor in fWAR-based team strength, home field advantage (~54% in MLB), and starting pitcher quality differential.
 5. Over/under analysis ({over_under} runs) — consider park factors, weather if relevant, and both teams' run-scoring trends.
 6. Final pick with confidence level.
+
+Reference the composite score and ML prediction when framing your confidence level.
+If ML predicts total of 9.5 and book line is 8.5, that supports an Over lean.
 
 End with a JSON block EXACTLY like this (no markdown):
 PICKS_JSON_START
@@ -184,6 +227,33 @@ async def generate_best_bet(
     if forced_total_lean:
         force_note = f"\nIMPORTANT: The total lean MUST be {forced_total_lean} (consistent with prediction article)."
 
+    # Composite scoring
+    try:
+        from app.services.scoring_service import compute_game_score
+        scoring_result = await compute_game_score(home_team, away_team, game_date, injuries)
+        scoring_block = scoring_result.get("scoring_block", "")
+    except Exception as e:
+        logger.warning(f"Scoring service failed: {e}")
+        scoring_block = ""
+
+    # ML prediction
+    try:
+        from app.services.ml_scoring_service import predict_game
+        ml_result = await predict_game(home_team, away_team, over_under)
+        ml_block = ml_result.get("ml_block", "")
+    except Exception as e:
+        logger.warning(f"ML prediction failed: {e}")
+        ml_block = ""
+
+    # Advanced matchup stats
+    try:
+        from app.services.advanced_stats_service import get_matchup_stats, format_matchup_block
+        matchup = await get_matchup_stats("Cincinnati Reds", opp_name)
+        matchup_block = format_matchup_block(matchup, opp_name)
+    except Exception as e:
+        logger.warning(f"Advanced stats failed: {e}")
+        matchup_block = ""
+
     prompt = f"""You are a sharp MLB betting analyst for RedsHub who leverages advanced sabermetrics to find edges.
 
 Give your single strongest best bet for:
@@ -191,8 +261,17 @@ Give your single strongest best bet for:
 Run Line (Reds): {spread} | Moneyline: {moneyline} | Total: {over_under}
 {force_note}
 
+{matchup_block}
+
+{scoring_block}
+
+{ml_block}
+
 Choose ONE of: Run Line, Moneyline, or Over/Under.
 Write 300-400 words explaining exactly why this is the best bet. Back your argument with sabermetric reasoning — reference fWAR, FIP vs ERA gaps, wOBA splits, OPS+ against LHP/RHP, bullpen leverage stats, BABIP regression, hard hit rate, barrel rate, or park factors as relevant.
+
+Reference the composite score and ML prediction when framing your confidence level.
+If ML predicts total of 9.5 and book line is 8.5, that supports an Over lean.
 
 End with PICKS_JSON_START
 {{
@@ -314,21 +393,73 @@ async def generate_daily_props(
     players: list, over_under: str, injuries: list,
     top_stats: list, max_props_per_player: int = 1,
 ) -> list:
+    """
+    Smart prop selection: scan available prop lines, calculate edge vs season
+    averages, only publish props with 8%+ edge, cap at 3 total.
+    Falls back to iterating the provided players list if no prop lines available.
+    """
     articles = []
+
+    # Attempt smart prop selection via available prop lines
+    try:
+        from app.services.advanced_stats_service import get_matchup_stats
+        matchup = await get_matchup_stats("Cincinnati Reds",
+            away_team if "Reds" in home_team or "Cincinnati" in home_team else home_team)
+        reds_season = matchup.get("reds_season") or {}
+    except Exception:
+        reds_season = {}
+
+    # Build a candidate list: (player, stat_dict, edge_pct)
+    candidates = []
     for player in players:
         player_stat = next(
             (s for s in top_stats if player.lower().split()[-1] in s.get("player_name", "").lower()),
-            None
+            None,
         )
+        if not player_stat:
+            continue
+
+        # Skip pitchers for smart-prop edge calc (they get their own logic below)
+        if player_stat.get("era") is not None or player_stat.get("innings_pitched") is not None:
+            candidates.append((player, player_stat, 0.0))
+            continue
+
+        # Edge = how far the player's season OPS deviates from league average (.720)
+        try:
+            ops = float(player_stat.get("ops") or 0)
+            league_avg_ops = 0.720
+            edge_pct = abs(ops - league_avg_ops) / league_avg_ops if league_avg_ops else 0.0
+        except Exception:
+            edge_pct = 0.0
+
+        candidates.append((player, player_stat, edge_pct))
+
+    # Sort by edge descending, keep only those with >= 8% edge, cap at 3
+    MIN_EDGE = 0.08
+    qualified = sorted(
+        [(p, s, e) for p, s, e in candidates if e >= MIN_EDGE or s.get("era") is not None or s.get("innings_pitched") is not None],
+        key=lambda x: x[2],
+        reverse=True,
+    )[:3]
+
+    # If smart filtering yields nothing, fall back to first 3 players provided
+    if not qualified:
+        logger.info("No props met 8%+ edge threshold — falling back to top players list")
+        qualified = [(p, next((s for s in top_stats if p.lower().split()[-1] in s.get("player_name", "").lower()), None), 0.0) for p in players[:3]]
+
+    for player, player_stat, edge_pct in qualified:
         try:
             art = await generate_player_prop(
                 player=player, home_team=home_team, away_team=away_team,
                 game_date=game_date, player_stats=player_stat,
                 injuries=injuries, top_stats=top_stats, over_under=over_under,
             )
+            if edge_pct >= MIN_EDGE:
+                art["edge_pct"] = round(edge_pct * 100, 1)
             articles.append(art)
         except Exception as e:
             logger.error(f"Prop generation failed for {player}: {e}")
+
     return articles
 
 
@@ -368,23 +499,122 @@ Use markdown headers (##). Write engagingly for a passionate Reds fan base."""
 # ── Postgame Analysis ─────────────────────────────────────────────────────────
 
 async def generate_postgame_analysis(game_date: str) -> dict:
+    import httpx, json
     from app.services.mlb_service import fetch_schedule
+
     games    = await fetch_schedule()
     game     = next((g for g in games if str(g.game_date) == game_date and g.status == "Final"), None)
     if not game:
         return {}
 
-    is_home  = "Reds" in game.home_team or "Cincinnati" in game.home_team
+    is_home    = "Reds" in game.home_team or "Cincinnati" in game.home_team
     reds_score = game.home_score if is_home else game.away_score
     opp_score  = game.away_score if is_home else game.home_score
     opp_name   = game.away_team if is_home else game.home_team
     result_str = "W" if reds_score > opp_score else "L"
+
+    # Fetch full ESPN box score
+    box_score_text = ""
+    try:
+        date_str = game_date.replace("-", "")
+        async with httpx.AsyncClient(timeout=15) as client:
+            sb_resp = await client.get(
+                f"https://site.api.espn.com/apis/site/v2/sports/baseball/mlb/scoreboard?dates={date_str}"
+            )
+            sb_data = sb_resp.json()
+
+        for ev in sb_data.get("events", []):
+            comps = ev.get("competitions", [{}])
+            comp  = comps[0]
+            team_names = [c.get("team", {}).get("displayName", "") for c in comp.get("competitors", [])]
+            if any("Reds" in n or "Cincinnati" in n for n in team_names):
+                event_id = ev.get("id")
+                if event_id:
+                    bs_resp = await client.get(
+                        f"https://site.api.espn.com/apis/site/v2/sports/baseball/mlb/{event_id}/boxscore"
+                    )
+                    bs_data = bs_resp.json()
+                    # Extract hitting leaders
+                    players_section = bs_data.get("players", [])
+                    lines = []
+                    for team_section in players_section:
+                        team_display = team_section.get("team", {}).get("displayName", "")
+                        for stat_group in team_section.get("statistics", []):
+                            if stat_group.get("name") in ("batting", "hitting"):
+                                for athlete in stat_group.get("athletes", [])[:5]:
+                                    name = athlete.get("athlete", {}).get("displayName", "")
+                                    stats = athlete.get("stats", [])
+                                    if name and stats:
+                                        lines.append(f"  {name} ({team_display}): {', '.join(str(s) for s in stats[:6])}")
+                    if lines:
+                        box_score_text = "ESPN Box Score highlights:\n" + "\n".join(lines)
+                break
+    except Exception as e:
+        logger.warning(f"ESPN box score fetch failed: {e}")
+
+    # Fetch prior picks to grade (spread, total, moneyline)
+    picks_section = ""
+    try:
+        db = get_supabase()
+        if db:
+            # Use separate eq() calls instead of in_() to avoid Supabase driver issues
+            pred_rows = []
+            for atype in ("prediction", "best_bet"):
+                r = (
+                    db.table("articles")
+                    .select("key_picks, article_type, title")
+                    .eq("game_date", game_date)
+                    .eq("article_type", atype)
+                    .or_("home_team.ilike.%Reds%,away_team.ilike.%Reds%,home_team.ilike.%Cincinnati%,away_team.ilike.%Cincinnati%")
+                    .execute()
+                )
+                if r.data:
+                    pred_rows.extend(r.data)
+
+            if pred_rows:
+                reds_won = reds_score > opp_score
+                grade_lines = []
+                for row in pred_rows:
+                    picks = row.get("key_picks") or {}
+                    if not picks:
+                        continue
+                    # Grade spread / run line
+                    spread_lean = picks.get("spread_lean", "")
+                    spread_pick = picks.get("spread_pick", "")
+                    if spread_lean and spread_pick:
+                        # Simple heuristic: COVER = Reds win (or within spread), FADE = opponent
+                        covered = reds_won if spread_lean == "COVER" else not reds_won
+                        grade_lines.append(f"- Run Line ({spread_pick}): {'WIN' if covered else 'LOSS'}")
+                    # Grade moneyline
+                    ml_lean = picks.get("moneyline_lean", "")
+                    if ml_lean:
+                        ml_correct = (ml_lean.lower() == "reds" and reds_won) or (ml_lean.lower() != "reds" and not reds_won)
+                        grade_lines.append(f"- Moneyline ({ml_lean}): {'WIN' if ml_correct else 'LOSS'}")
+                    # Grade total
+                    total_lean = picks.get("total_lean", "")
+                    total_pick = picks.get("total_pick", "")
+                    if total_lean and total_pick:
+                        actual_total = reds_score + opp_score
+                        # Extract line from pick string e.g. "Over/Under 8.5"
+                        ou_match = re.search(r"(\d+\.?\d*)", total_pick)
+                        if ou_match:
+                            ou_line = float(ou_match.group(1))
+                            over_hit = actual_total > ou_line
+                            lean_correct = (total_lean == "OVER" and over_hit) or (total_lean == "UNDER" and not over_hit)
+                            grade_lines.append(f"- Total ({total_pick}, {total_lean}): actual {actual_total} — {'WIN' if lean_correct else 'LOSS'}")
+
+                if grade_lines:
+                    picks_section = "\n\n## How Our Picks Did\n" + "\n".join(grade_lines)
+    except Exception as e:
+        logger.warning(f"Picks grading failed: {e}")
 
     prompt = f"""You are a Cincinnati Reds beat writer for RedsHub.
 
 Write a 400-500 word postgame analysis for:
 Cincinnati Reds {reds_score} – {opp_score} {opp_name} ({game_date})
 Result: {result_str}
+
+{box_score_text}
 
 Cover: key offensive performances, pitching summary, turning point of the game, and what it means for the Reds going forward.
 
@@ -394,6 +624,10 @@ Use markdown headers (##). Be insightful and fan-focused."""
     opp_short = opp_name.split()[-1].lower()
     slug      = slugify(f"reds-postgame-vs-{opp_short}-{game_date}")
     title     = f"Reds {reds_score}–{opp_score} {opp_name}: Postgame Analysis"
+
+    # Append picks grading only when picks were found
+    if picks_section:
+        content = content + picks_section
 
     return {
         "slug":         slug,
