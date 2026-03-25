@@ -3,6 +3,7 @@ import { Link } from "react-router-dom";
 import { Helmet } from "react-helmet-async";
 import { getNews, getInjuries, getBirthdays, getSchedule, getStandings, getArticles, getResults } from "../utils/api";
 import { getPlayerImage } from "../utils/playerImages";
+import AdBanner from "../components/AdBanner";
 
 // Reds design tokens
 const S = {
@@ -182,6 +183,8 @@ export default function Dashboard() {
           )}
         </div>
       </div>
+
+      <AdBanner style={{ margin: "0.75rem 2rem" }} />
 
       {/* Main Dashboard Grid */}
       <div style={{
@@ -448,6 +451,8 @@ export default function Dashboard() {
               })}
             </div>
           </section>
+
+          <AdBanner style={{ margin: "0.5rem 0" }} />
 
           {/* News Feed */}
           <section>
