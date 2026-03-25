@@ -1,0 +1,30 @@
+{
+  "trained_at": "2026-03-25T05:16:56.572616",
+  "features": [
+    "is_reds_game",
+    "home_win_pct",
+    "away_win_pct",
+    "win_pct_diff",
+    "roll5_home_runs",
+    "roll5_away_runs",
+    "roll5_total",
+    "roll5_margin",
+    "roll10_home_runs",
+    "roll10_away_runs",
+    "roll10_total",
+    "roll10_margin",
+    "ewm5_home_runs",
+    "ewm5_total",
+    "ewm5_margin",
+    "home_win_streak",
+    "scoring_trend"
+  ],
+  "home_runs": {
+    "cv_mae": 2.46,
+    "n_samples": 7409
+  },
+  "away_runs": {
+    "cv_mae": 2.58,
+    "n_samples": 7409
+  }
+}
