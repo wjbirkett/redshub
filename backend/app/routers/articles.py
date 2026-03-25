@@ -109,6 +109,51 @@ async def articles_sitemap():
 </urlset>"""
     return Response(content=xml, media_type="application/xml")
 
+@router.get("/backtest")
+async def backtest():
+    """Simulate ROI from all historical predictions."""
+    from app.db import get_supabase
+    db = get_supabase()
+    if not db:
+        return {"error": "No DB"}
+    # Filter for Reds games only
+    pred = db.table("prediction_results").select("*").execute()
+    props = db.table("prop_results").select("*").execute()
+
+    # Filter to Reds
+    reds_preds = [p for p in (pred.data or []) if "reds" in (p.get("home_team", "") + p.get("away_team", "")).lower()]
+    reds_props = [p for p in (props.data or []) if p.get("player", "") in [
+        "Elly De La Cruz", "TJ Friedl", "Spencer Steer", "Tyler Stephenson",
+        "Jonathan India", "Jake Fraley", "Jeimer Candelario"
+    ]]
+
+    # Simple ROI calc
+    win_payout = 100 / 110  # -110 odds
+    total_bets = 0
+    total_profit = 0
+
+    for r in reds_preds:
+        for key in ["spread_result", "total_result"]:
+            if r.get(key):
+                total_bets += 1
+                total_profit += win_payout if r[key] == "HIT" else -1
+
+    for r in reds_props:
+        if r.get("result"):
+            total_bets += 1
+            total_profit += win_payout if r["result"] == "HIT" else -1
+
+    roi = (total_profit / max(total_bets, 1)) * 100
+
+    return {
+        "total_bets": total_bets,
+        "total_profit_units": round(total_profit, 2),
+        "roi_pct": round(roi, 1),
+        "predictions": len(reds_preds),
+        "props": len(reds_props),
+    }
+
+
 @router.get("/{slug}")
 async def get_article(slug: str):
     article = await get_article_by_slug(slug)

@@ -126,6 +126,20 @@ async def generate_game_preview(
         logger.warning(f"ML prediction failed: {e}")
         ml_block = ""
 
+    # Situational flags
+    try:
+        from app.services.situational_flags import get_situational_flags
+        situational_block = await get_situational_flags(home_team, away_team, game_date)
+    except Exception:
+        situational_block = ""
+
+    # Umpire context
+    try:
+        from app.services.umpire_service import get_umpire_context
+        umpire_block = await get_umpire_context(game_date)
+    except Exception:
+        umpire_block = ""
+
     # Advanced matchup stats
     try:
         from app.services.advanced_stats_service import get_matchup_stats, format_matchup_block, get_probable_pitchers
@@ -168,6 +182,10 @@ Key Reds batting stats:
 {scoring_block}
 
 {ml_block}
+
+{situational_block}
+
+{umpire_block}
 
 Write a 500-700 word analysis covering:
 1. Starting pitcher matchup — reference ERA+, FIP, WHIP, K/9, and recent starts. Mention how each starter's FIP compares to their ERA (luck vs. skill).
