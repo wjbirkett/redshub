@@ -36,7 +36,7 @@ async def get_umpire_context(game_date: str) -> str:
         for ev in data.get("events", []):
             comp = ev["competitions"][0]
             teams = [c.get("team", {}).get("id") for c in comp.get("competitors", [])]
-            if "28" in teams:  # Reds ESPN ID
+            if "17" in teams:  # Reds ESPN ID
                 event_id = ev["id"]
                 # Get umpire from summary
                 async with httpx.AsyncClient(timeout=10) as client:

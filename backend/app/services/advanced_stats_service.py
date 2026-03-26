@@ -166,7 +166,7 @@ async def get_probable_pitchers(game_date: str) -> Dict[str, Any]:
         for ev in data.get("events", []):
             comp = ev["competitions"][0]
             teams = [c.get("team", {}).get("id") for c in comp.get("competitors", [])]
-            if "28" in teams:  # Reds ESPN ID
+            if "17" in teams:  # Reds ESPN ID
                 probables = comp.get("probables", [])
                 result = {}
                 for p in probables:
@@ -178,7 +178,7 @@ async def get_probable_pitchers(game_date: str) -> Dict[str, Any]:
                     if stats:
                         parts = [f"{s.get('displayValue', '')} {s.get('abbreviation', '')}" for s in stats[:4]]
                         stat_line = f" ({', '.join(parts)})"
-                    if team_id == "28":
+                    if team_id == "17":
                         result["reds_sp"] = f"{name}{stat_line}"
                     else:
                         result["opp_sp"] = f"{name}{stat_line}"

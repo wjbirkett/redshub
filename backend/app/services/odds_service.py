@@ -7,7 +7,7 @@ from app.models.schemas import BettingLine
 logger = logging.getLogger(__name__)
 
 ESPN_BASE     = "https://sports.core.api.espn.com/v2/sports/baseball/leagues/mlb"
-REDS_ESPN_ID  = "28"
+REDS_ESPN_ID  = "17"
 
 
 async def fetch_reds_lines() -> List[BettingLine]:

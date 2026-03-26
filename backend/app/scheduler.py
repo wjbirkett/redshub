@@ -45,7 +45,7 @@ def generate_article(force: bool = False):
     from app.services.odds_service import fetch_reds_lines
     import httpx
 
-    REDS_ESPN_ID = "28"
+    REDS_ESPN_ID = "17"
     ESPN_BASE    = "https://site.api.espn.com/apis/site/v2/sports/baseball/mlb"
 
     async def _generate():
@@ -218,7 +218,7 @@ async def _postgame_check():
         from app.db import get_supabase
 
         now_utc   = datetime.now(timezone.utc)
-        REDS_ESPN_ID = "28"
+        REDS_ESPN_ID = "17"
         for check_date in [dt.today(), dt.today() - timedelta(days=1)]:
             ds = check_date.strftime("%Y%m%d")
             async with httpx.AsyncClient(timeout=15) as client:

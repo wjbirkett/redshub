@@ -5,7 +5,7 @@ from app.models.schemas import InjuryReport, Game, TeamStanding, PlayerStat
 
 logger = logging.getLogger(__name__)
 
-REDS_ESPN_ID  = "28"
+REDS_ESPN_ID  = "17"
 ESPN_BASE     = "https://site.api.espn.com/apis/site/v2/sports/baseball/mlb"
 ESPN_V2       = "https://site.api.espn.com/apis/v2/sports/baseball/mlb"
 MLB_STATS_BASE = "https://statsapi.mlb.com/api/v1"

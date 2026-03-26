@@ -6,7 +6,7 @@ from app.db import get_supabase
 logger = logging.getLogger(__name__)
 
 ESPN_SCOREBOARD = "https://site.api.espn.com/apis/site/v2/sports/baseball/mlb/scoreboard"
-REDS_ESPN_ID    = "28"
+REDS_ESPN_ID    = "17"
 
 
 async def fetch_game_result(game_date: str) -> dict | None:
