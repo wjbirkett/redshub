@@ -187,12 +187,18 @@ Key Reds batting stats:
 
 {umpire_block}
 
+CRITICAL RULES:
+- Name BOTH starting pitchers by name in the first paragraph. If probable starters are listed above, USE THOSE NAMES. Do NOT say "back-end starter" or "TBD" if a name is provided.
+- Use REAL stats and numbers. If you don't have a stat, skip it — do NOT make up numbers or say "data unavailable."
+- Be specific and confident. Readers are bettors who need actionable analysis, not vague hedging.
+- If data is missing, skip that metric silently. Never mention missing data.
+
 Write a 500-700 word analysis covering:
-1. Starting pitcher matchup — reference ERA+, FIP, WHIP, K/9, and recent starts. Mention how each starter's FIP compares to their ERA (luck vs. skill).
-2. Offensive outlook — reference wOBA, OPS+, hard hit rate, barrel rate, and BABIP trends for key hitters on both sides.
-3. Bullpen analysis — mention bullpen ERA, leverage performance, and high-leverage reliever availability.
-4. Run line analysis (Reds {spread}) — factor in fWAR-based team strength, home field advantage (~54% in MLB), and starting pitcher quality differential.
-5. Over/under analysis ({over_under} runs) — consider park factors, weather if relevant, and both teams' run-scoring trends.
+1. Starting pitcher matchup — NAME BOTH STARTERS. Reference ERA, FIP, WHIP, K/9 if available.
+2. Offensive outlook — reference OPS, batting average, key hitters for both sides.
+3. Bullpen analysis — mention bullpen strengths/weaknesses.
+4. Run line analysis (Reds {spread}) — factor in home field advantage (~54% in MLB) and starting pitcher quality.
+5. Over/under analysis ({over_under} runs) — consider park factors (GABP = hitter-friendly) and scoring trends.
 6. Final pick with confidence level.
 
 Reference the composite score and ML prediction when framing your confidence level.

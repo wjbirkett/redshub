@@ -156,7 +156,38 @@ def format_matchup_block(matchup: Dict[str, Any], opponent: str) -> str:
 
 
 async def get_probable_pitchers(game_date: str) -> Dict[str, Any]:
-    """Get probable starters from ESPN scoreboard."""
+    """Get probable starters. Primary: MLB Stats API. Fallback: ESPN."""
+    # Try MLB Stats API first (more reliable for probable pitchers)
+    try:
+        async with httpx.AsyncClient(timeout=10) as client:
+            resp = await client.get(
+                f"{MLB_API}/schedule",
+                params={"sportId": 1, "date": game_date, "hydrate": "probablePitcher"}
+            )
+            data = resp.json()
+
+        for d in data.get("dates", []):
+            for g in d.get("games", []):
+                teams = g.get("teams", {})
+                home_team = teams.get("home", {}).get("team", {})
+                away_team = teams.get("away", {}).get("team", {})
+                if home_team.get("id") == REDS_ID or away_team.get("id") == REDS_ID:
+                    home_pp = teams.get("home", {}).get("probablePitcher", {})
+                    away_pp = teams.get("away", {}).get("probablePitcher", {})
+                    result = {}
+                    if home_team.get("id") == REDS_ID:
+                        result["reds_sp"] = home_pp.get("fullName", "TBD")
+                        result["opp_sp"] = away_pp.get("fullName", "TBD")
+                    else:
+                        result["reds_sp"] = away_pp.get("fullName", "TBD")
+                        result["opp_sp"] = home_pp.get("fullName", "TBD")
+                    if result.get("reds_sp") != "TBD" or result.get("opp_sp") != "TBD":
+                        logger.info(f"Probable pitchers from MLB API: {result}")
+                        return result
+    except Exception as e:
+        logger.warning(f"MLB Stats API probable pitchers failed: {e}")
+
+    # Fallback: ESPN
     try:
         ds = game_date.replace("-", "")
         async with httpx.AsyncClient(timeout=10) as client:
@@ -173,16 +204,12 @@ async def get_probable_pitchers(game_date: str) -> Dict[str, Any]:
                     team_id = p.get("team", {}).get("id")
                     pitcher = p.get("athlete", {})
                     name = pitcher.get("displayName", "TBD")
-                    stats = pitcher.get("statistics", [])
-                    stat_line = ""
-                    if stats:
-                        parts = [f"{s.get('displayValue', '')} {s.get('abbreviation', '')}" for s in stats[:4]]
-                        stat_line = f" ({', '.join(parts)})"
                     if team_id == "17":
-                        result["reds_sp"] = f"{name}{stat_line}"
+                        result["reds_sp"] = name
                     else:
-                        result["opp_sp"] = f"{name}{stat_line}"
-                return result
+                        result["opp_sp"] = name
+                if result:
+                    return result
         return {}
     except Exception as e:
         logger.warning(f"Probable pitchers fetch failed: {e}")
