@@ -121,15 +121,23 @@ async def resolve_game_predictions(game_date: str) -> dict:
                 ml_result = "HIT" if reds_score < opp_score else "MISS"
 
             if spread_result or total_result or ml_result:
-                db.table("prediction_results").upsert({
+                upsert_data = {
                     "slug":          article["slug"],
                     "game_date":     game_date,
                     "home_team":     result["home_team"],
                     "away_team":     result["away_team"],
                     "spread_result": spread_result,
                     "total_result":  total_result,
-                    "moneyline_result": ml_result,
-                }, on_conflict="slug")
+                }
+                # Only include moneyline_result if column exists (may not in shared DB)
+                if ml_result:
+                    try:
+                        db.table("prediction_results").upsert({**upsert_data, "moneyline_result": ml_result}, on_conflict="slug")
+                        resolved += 1
+                        continue
+                    except Exception:
+                        pass  # Column doesn't exist, fall through to upsert without it
+                db.table("prediction_results").upsert(upsert_data, on_conflict="slug")
                 resolved += 1
 
     return {"status": "resolved", "game_date": game_date, "resolved": resolved}
