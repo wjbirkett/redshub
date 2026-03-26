@@ -82,6 +82,12 @@ export default function Dashboard() {
   const mlTotal  = preds.filter((r) => r.moneyline_result).length;
   const propHits = propRes.filter((r) => r.result === "HIT").length;
 
+  const winPayout = 100 / 110;
+  const atsProfit = atsHits * winPayout - (atsTotal - atsHits);
+  const ouProfit = ouHits * winPayout - (ouTotal - ouHits);
+  const propProfit = propHits * winPayout - (propRes.length - propHits);
+  const totalUnits = +(atsProfit + ouProfit + propProfit).toFixed(1);
+
   const opp = (a) => {
     if (!a) return "TBD";
     return a.home_team?.includes("Reds") ? a.away_team : a.home_team;
@@ -149,6 +155,14 @@ export default function Dashboard() {
               <span style={{ fontSize: "0.5625rem", color: S.textMuted, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.1em" }}>GB</span>
             </div>
           </>}
+          {(atsTotal > 0 || ouTotal > 0 || propRes.length > 0) && (
+            <div style={{ textAlign: "center" }}>
+              <span style={{ display: "block", fontFamily: "Space Grotesk, sans-serif", fontWeight: 900, fontSize: "1.4rem", color: totalUnits >= 0 ? S.green : S.missRed }}>
+                {totalUnits >= 0 ? "+" : ""}{totalUnits}u
+              </span>
+              <span style={{ fontSize: "0.5625rem", color: S.textMuted, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.1em" }}>UNITS</span>
+            </div>
+          )}
           {atsTotal > 0 && (
             <div style={{ textAlign: "center" }}>
               <span style={{ display: "block", fontFamily: "Space Grotesk, sans-serif", fontWeight: 900, fontSize: "1.4rem", color: atsHits / atsTotal >= 0.5 ? S.green : S.missRed }}>
