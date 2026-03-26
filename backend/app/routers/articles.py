@@ -254,19 +254,33 @@ async def generate_for_date(game_date: str, force: bool = True):
     odds     = [to_dict(o) for o in odds_raw]
     spread, moneyline, over_under = _get_odds_summary(odds, game)
 
-    art   = await generate_game_preview(game["home_team"], game["away_team"], game_date, spread, moneyline, over_under, injuries, games, top_st)
-    await save_article(art)
-    picks = art.get("key_picks") or {}
-    bb    = await generate_best_bet(game["home_team"], game["away_team"], game_date, spread, moneyline, over_under, injuries, top_st, forced_total_lean=picks.get("total_lean"), forced_total_pick=picks.get("total_pick"))
-    await save_article(bb)
-    active = [p for p in PROP_PLAYERS if not any(p.split()[-1].lower() in i.get("player_name","").lower() and "out" in i.get("status","").lower() for i in injuries)]
-    # Add probable starting pitcher for strikeout props
-    starter = await fetch_probable_pitcher(game["home_team"], game["away_team"])
-    if starter and starter not in active:
-        active.append(starter)
-    props  = await generate_daily_props(game["home_team"], game["away_team"], game_date, active, over_under, injuries, top_st)
-    for p in props:
-        await save_article(p)
+    import traceback as tb
+    try:
+        art   = await generate_game_preview(game["home_team"], game["away_team"], game_date, spread, moneyline, over_under, injuries, games, top_st)
+        await save_article(art)
+    except Exception as e:
+        return {"error": f"Prediction failed: {e}", "traceback": tb.format_exc()}
+
+    try:
+        picks = art.get("key_picks") or {}
+        bb    = await generate_best_bet(game["home_team"], game["away_team"], game_date, spread, moneyline, over_under, injuries, top_st, forced_total_lean=picks.get("total_lean"), forced_total_pick=picks.get("total_pick"))
+        await save_article(bb)
+    except Exception as e:
+        bb = {"slug": "error"}
+        logger.error(f"Best bet failed: {e}")
+
+    props = []
+    try:
+        active = [p for p in PROP_PLAYERS if not any(p.split()[-1].lower() in i.get("player_name","").lower() and "out" in i.get("status","").lower() for i in injuries)]
+        starter = await fetch_probable_pitcher(game["home_team"], game["away_team"])
+        if starter and starter not in active:
+            active.append(starter)
+        props  = await generate_daily_props(game["home_team"], game["away_team"], game_date, active, over_under, injuries, top_st)
+        for p in props:
+            await save_article(p)
+    except Exception as e:
+        logger.error(f"Props failed: {e}\n{tb.format_exc()}")
+
     return {"message": f"Generated {2+len(props)} articles for {game_date}", "prediction": art["slug"], "best_bet": bb["slug"], "props": [p["slug"] for p in props]}
 
 
