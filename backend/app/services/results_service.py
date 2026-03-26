@@ -121,23 +121,35 @@ async def resolve_game_predictions(game_date: str) -> dict:
                 ml_result = "HIT" if reds_score < opp_score else "MISS"
 
             if spread_result or total_result or ml_result:
+                opponent = result["away_team"] if "reds" in result["home_team"].lower() or "cincinnati" in result["home_team"].lower() else result["home_team"]
                 upsert_data = {
-                    "slug":          article["slug"],
-                    "game_date":     game_date,
-                    "home_team":     result["home_team"],
-                    "away_team":     result["away_team"],
-                    "spread_result": spread_result,
-                    "total_result":  total_result,
+                    "slug":            article["slug"],
+                    "game_date":       game_date,
+                    "opponent":        opponent,
+                    "spread_pick":     picks.get("spread_pick"),
+                    "spread_lean":     picks.get("spread_lean"),
+                    "spread_result":   spread_result,
+                    "total_pick":      picks.get("total_pick"),
+                    "total_lean":      picks.get("total_lean"),
+                    "total_result":    total_result,
+                    "moneyline_pick":  picks.get("moneyline_pick"),
+                    "moneyline_lean":  picks.get("moneyline_lean"),
+                    "moneyline_result": ml_result,
+                    "knicks_score":    reds_score,
+                    "opp_score":       opp_score,
+                    "resolved_at":     __import__("datetime").datetime.now(__import__("datetime").timezone.utc).isoformat(),
                 }
-                # Only include moneyline_result if column exists (may not in shared DB)
-                if ml_result:
+                try:
+                    db.table("prediction_results").upsert(upsert_data, on_conflict="slug")
+                    resolved += 1
+                except Exception as e:
+                    # Try without moneyline columns
                     try:
-                        db.table("prediction_results").upsert({**upsert_data, "moneyline_result": ml_result}, on_conflict="slug")
+                        for k in ["moneyline_pick", "moneyline_lean", "moneyline_result"]:
+                            upsert_data.pop(k, None)
+                        db.table("prediction_results").upsert(upsert_data, on_conflict="slug")
                         resolved += 1
-                        continue
-                    except Exception:
-                        pass  # Column doesn't exist, fall through to upsert without it
-                db.table("prediction_results").upsert(upsert_data, on_conflict="slug")
-                resolved += 1
+                    except Exception as e2:
+                        logger.error(f"Results upsert failed: {e2}")
 
     return {"status": "resolved", "game_date": game_date, "resolved": resolved}
