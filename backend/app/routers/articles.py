@@ -85,7 +85,14 @@ async def get_results():
         pred_data = []
     try:
         props = db.table("prop_results").select("*").order("game_date", desc=True).execute()
-        props_data = props.data or []
+        # Filter to Reds players only (shared DB has Knicks props too)
+        reds_players = {
+            "Elly De La Cruz", "TJ Friedl", "Spencer Steer", "Tyler Stephenson",
+            "Jonathan India", "Jake Fraley", "Jeimer Candelario", "Stuart Fairchild",
+            "Santiago Espinal", "Hunter Greene", "Nick Lodolo", "Andrew Abbott",
+            "Graham Ashcraft", "Frankie Montas",
+        }
+        props_data = [p for p in (props.data or []) if p.get("player") in reds_players]
     except Exception:
         props_data = []
     return {"predictions": pred_data, "props": props_data}
