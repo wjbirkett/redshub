@@ -154,7 +154,7 @@ async def generate_game_preview(
         matchup_block = ""
         pitcher_block = ""
 
-    prompt = f"""You are an expert MLB sabermetrics analyst writing for RedsHub, a Cincinnati Reds fan betting dashboard. You are deeply versed in advanced baseball analytics and use them to inform every prediction.
+    prompt = f"""You are an expert MLB sabermetrics analyst writing for RedsHub. You are deeply versed in advanced baseball analytics. Your job is to find the BEST BETS — even if that means picking AGAINST the Reds. You are NOT a homer. You are a sharp bettor first.
 
 Generate a comprehensive game prediction article for:
 {TEAM_NAME} ({location}) vs {opp_name}
@@ -197,9 +197,12 @@ Write a 500-700 word analysis covering:
 1. Starting pitcher matchup — NAME BOTH STARTERS. Reference ERA, FIP, WHIP, K/9 if available.
 2. Offensive outlook — reference OPS, batting average, key hitters for both sides.
 3. Bullpen analysis — mention bullpen strengths/weaknesses.
-4. Run line analysis (Reds {spread}) — factor in home field advantage (~54% in MLB) and starting pitcher quality.
+4. Run line analysis — pick whichever side has the edge (Reds OR opponent). Factor in home field advantage (~54% in MLB) and starting pitcher quality.
 5. Over/under analysis ({over_under} runs) — consider park factors (GABP = hitter-friendly) and scoring trends.
-6. Final pick with confidence level.
+6. **Predicted final score** — give a specific predicted score (e.g., "Reds 6, Red Sox 4").
+7. Final pick with confidence level.
+
+IMPORTANT: Pick the BEST bet, not the Reds bet. If the opponent is the better play, say so. Readers trust honest analysis over homerism.
 
 Reference the composite score and ML prediction when framing your confidence level.
 If ML predicts total of 9.5 and book line is 8.5, that supports an Over lean.
@@ -207,10 +210,13 @@ If ML predicts total of 9.5 and book line is 8.5, that supports an Over lean.
 End with a JSON block EXACTLY like this (no markdown):
 PICKS_JSON_START
 {{
-  "spread_pick": "Reds {spread}",
+  "spread_pick": "Reds {spread} or {opp_name} (opposite side)",
   "spread_lean": "COVER or FADE",
+  "moneyline_pick": "Reds or {opp_name}",
+  "moneyline_lean": "REDS or OPPONENT",
   "total_pick": "Over/Under {over_under}",
   "total_lean": "OVER or UNDER",
+  "predicted_score": "Reds X, {opp_name} Y",
   "confidence": "High or Medium or Low"
 }}
 PICKS_JSON_END
@@ -278,7 +284,7 @@ async def generate_best_bet(
         logger.warning(f"Advanced stats failed: {e}")
         matchup_block = ""
 
-    prompt = f"""You are a sharp MLB betting analyst for RedsHub who leverages advanced sabermetrics to find edges.
+    prompt = f"""You are a sharp MLB betting analyst for RedsHub. Your job is to find the BEST BET — even if it means picking AGAINST the Reds. You are a sharp bettor, not a fan.
 
 Give your single strongest best bet for:
 {TEAM_NAME} vs {opp_name} on {game_date}
