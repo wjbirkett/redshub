@@ -310,13 +310,33 @@ async def generate_history(force: bool = False):
     return {"message": "History article generated", "slug": saved["slug"]}
 
 
+@router.post("/generate/postgame")
+async def generate_postgame(game_date: str = None):
+    """Force-generate postgame analysis for a specific date or today."""
+    import traceback
+    if not game_date:
+        game_date = str(date.today())
+    try:
+        article = await generate_postgame_analysis(game_date)
+        if not article or not article.get("slug"):
+            return {"error": f"Postgame generation returned empty for {game_date}"}
+        saved = await save_article(article)
+        return {"message": "Postgame article generated", "slug": saved["slug"]}
+    except Exception as e:
+        return {"error": str(e), "traceback": traceback.format_exc()}
+
+
 @router.post("/resolve-results")
 async def resolve_results(game_date: str = None):
     from app.services.results_service import resolve_game_predictions
+    import traceback
     if not game_date:
         game_date = str(date.today() - timedelta(days=1))
-    result = await resolve_game_predictions(game_date)
-    return {"game_date": game_date, "result": result}
+    try:
+        result = await resolve_game_predictions(game_date)
+        return {"game_date": game_date, "result": result}
+    except Exception as e:
+        return {"error": str(e), "traceback": traceback.format_exc()}
 
 
 @router.get("/debug-trigger")
