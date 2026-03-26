@@ -140,6 +140,14 @@ async def generate_game_preview(
     except Exception:
         umpire_block = ""
 
+    # FanDuel alt prop lines
+    try:
+        from app.services.alt_props_service import fetch_alt_props, format_alt_props_block
+        alt_props = await fetch_alt_props("Reds")
+        alt_props_block = format_alt_props_block(alt_props)
+    except Exception:
+        alt_props_block = ""
+
     # Advanced matchup stats
     try:
         from app.services.advanced_stats_service import get_matchup_stats, format_matchup_block, get_probable_pitchers
@@ -186,6 +194,8 @@ Key Reds batting stats:
 {situational_block}
 
 {umpire_block}
+
+{alt_props_block}
 
 CRITICAL RULES:
 - Name BOTH starting pitchers by name in the first paragraph. If probable starters are listed above, USE THOSE NAMES. Do NOT say "back-end starter" or "TBD" if a name is provided.
@@ -284,6 +294,14 @@ async def generate_best_bet(
         logger.warning(f"Advanced stats failed: {e}")
         matchup_block = ""
 
+    # FanDuel alt prop lines
+    try:
+        from app.services.alt_props_service import fetch_alt_props, format_alt_props_block
+        alt_props = await fetch_alt_props("Reds")
+        alt_props_block = format_alt_props_block(alt_props)
+    except Exception:
+        alt_props_block = ""
+
     prompt = f"""You are a sharp MLB betting analyst for RedsHub. Your job is to find the BEST BET — even if it means picking AGAINST the Reds. You are a sharp bettor, not a fan.
 
 Give your single strongest best bet for:
@@ -296,6 +314,8 @@ Run Line (Reds): {spread} | Moneyline: {moneyline} | Total: {over_under}
 {scoring_block}
 
 {ml_block}
+
+{alt_props_block}
 
 Choose ONE of: Run Line, Moneyline, or Over/Under.
 Write 300-400 words explaining exactly why this is the best bet. Back your argument with sabermetric reasoning — reference fWAR, FIP vs ERA gaps, wOBA splits, OPS+ against LHP/RHP, bullpen leverage stats, BABIP regression, hard hit rate, barrel rate, or park factors as relevant.
@@ -364,6 +384,14 @@ async def generate_player_prop(
 
     opp = away_team if "Reds" in home_team or "Cincinnati" in home_team else home_team
 
+    # FanDuel alt prop lines
+    try:
+        from app.services.alt_props_service import fetch_alt_props, format_alt_props_block
+        alt_props = await fetch_alt_props("Reds")
+        alt_props_block = format_alt_props_block(alt_props)
+    except Exception:
+        alt_props_block = ""
+
     if is_pitcher:
         prop_instruction = (
             f"This is a STARTING PITCHER prop. Focus on STRIKEOUTS (K's).\n"
@@ -384,6 +412,8 @@ async def generate_player_prop(
 Write a 300-400 word prop bet analysis for {player} ({TEAM_NAME}) against {opp} on {game_date}.
 {stat_str}
 Game total: {over_under}
+
+{alt_props_block}
 
 {prop_instruction}
 
