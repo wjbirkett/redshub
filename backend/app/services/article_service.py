@@ -361,7 +361,8 @@ async def generate_player_prop(
         )
     else:
         prop_instruction = (
-            "Pick ONE prop (hits O/U, home run, strikeouts, RBI, total bases).\n"
+            "Pick ONE prop from: hits O/U, home run, RBI, stolen bases, or total bases.\n"
+            "IMPORTANT: Do NOT always pick total bases. Choose the prop where you see the biggest edge based on the matchup.\n"
             "State the line clearly and argue OVER or UNDER with conviction.\n"
             "Reference wOBA, hard hit rate, barrel rate, BABIP trends, or platoon splits as relevant."
         )
