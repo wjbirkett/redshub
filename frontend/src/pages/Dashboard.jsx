@@ -62,9 +62,12 @@ export default function Dashboard() {
     (t.team_name || t.team || t.teamName || "").includes("Reds")
   );
 
-  const todayBestBet      = articles?.find((a) => a.article_type === "best_bet");
+  // Show postgame as hero if game is over, otherwise best bet/prediction
+  const todayBestBet      = articles?.find((a) => a.article_type === "postgame")
+    || articles?.find((a) => a.article_type === "best_bet")
+    || articles?.find((a) => a.article_type === "prediction");
   const latestPredictions = articles?.filter((a) =>
-    ["prediction", "best_bet", "prop"].includes(a.article_type)
+    ["prediction", "best_bet", "prop", "postgame"].includes(a.article_type)
   ).slice(0, 3);
 
   const nextGame = schedule?.find((g) => !g.home_score && g.status !== "Final");
