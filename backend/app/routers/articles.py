@@ -77,14 +77,18 @@ async def get_results():
     db = get_supabase()
     if not db:
         return {"predictions": [], "props": []}
-    # Filter to Reds games only
-    pred  = db.table("prediction_results").select("*").or_(
-        "home_team.ilike.%Reds%,away_team.ilike.%Reds%,home_team.ilike.%Cincinnati%,away_team.ilike.%Cincinnati%"
-    ).order("game_date", desc=True).execute()
-    props = db.table("prop_results").select("*").or_(
-        "home_team.ilike.%Reds%,away_team.ilike.%Reds%,home_team.ilike.%Cincinnati%,away_team.ilike.%Cincinnati%"
-    ).order("game_date", desc=True).execute()
-    return {"predictions": pred.data or [], "props": props.data or []}
+    try:
+        pred = db.table("prediction_results").select("*").order("game_date", desc=True).execute()
+        # Filter to Reds games client-side (or_() with ilike is unreliable)
+        pred_data = [p for p in (pred.data or []) if "reds" in (p.get("home_team", "") + p.get("away_team", "")).lower() or "cincinnati" in (p.get("home_team", "") + p.get("away_team", "")).lower()]
+    except Exception:
+        pred_data = []
+    try:
+        props = db.table("prop_results").select("*").order("game_date", desc=True).execute()
+        props_data = props.data or []
+    except Exception:
+        props_data = []
+    return {"predictions": pred_data, "props": props_data}
 
 @router.get("/odds")
 async def get_odds():

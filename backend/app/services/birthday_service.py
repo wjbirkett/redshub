@@ -8,7 +8,11 @@ logger = logging.getLogger(__name__)
 
 
 async def fetch_upcoming_birthdays(days_ahead: int = 7) -> List[PlayerBirthday]:
-    roster = await fetch_roster()
+    try:
+        roster = await fetch_roster()
+    except Exception as e:
+        logger.warning(f"Roster fetch failed for birthdays: {e}")
+        return []
     today  = date.today()
     bdays  = []
 
