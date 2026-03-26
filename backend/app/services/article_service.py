@@ -409,74 +409,115 @@ PICKS_JSON_END"""
 async def generate_daily_props(
     home_team: str, away_team: str, game_date: str,
     players: list, over_under: str, injuries: list,
-    top_stats: list, max_props_per_player: int = 1,
+    top_stats: list, max_props: int = 3,
 ) -> list:
     """
-    Smart prop selection: scan available prop lines, calculate edge vs season
-    averages, only publish props with 8%+ edge, cap at 3 total.
-    Falls back to iterating the provided players list if no prop lines available.
+    Smart prop selection using real sportsbook lines from The Odds API.
+    Calculates edge vs season averages, only publishes best edge props.
     """
     articles = []
 
-    # Attempt smart prop selection via available prop lines
+    # Fetch real prop lines from The Odds API
     try:
-        from app.services.advanced_stats_service import get_matchup_stats
-        matchup = await get_matchup_stats("Cincinnati Reds",
-            away_team if "Reds" in home_team or "Cincinnati" in home_team else home_team)
-        reds_season = matchup.get("reds_season") or {}
-    except Exception:
-        reds_season = {}
+        from app.services.prop_lines_service import fetch_live_prop_lines
+        all_lines = await fetch_live_prop_lines(home_team, away_team)
+        logger.info(f"Got prop lines for {len(all_lines)} players")
+    except Exception as e:
+        logger.warning(f"Could not fetch prop lines: {e}")
+        all_lines = {}
 
-    # Build a candidate list: (player, stat_dict, edge_pct)
-    candidates = []
-    for player in players:
-        player_stat = next(
-            (s for s in top_stats if player.lower().split()[-1] in s.get("player_name", "").lower()),
-            None,
+    # Build stats lookup
+    stats_lookup = {}
+    for s in top_stats:
+        name = s.get("player_name", "")
+        if name:
+            stats_lookup[name] = s
+
+    # Calculate edge for every available prop
+    prop_edges = []
+    for player, props in all_lines.items():
+        player_stat = stats_lookup.get(player) or next(
+            (s for s in top_stats if player.lower().split()[-1] in s.get("player_name", "").lower()), None
         )
         if not player_stat:
             continue
 
-        # Skip pitchers for smart-prop edge calc (they get their own logic below)
-        if player_stat.get("era") is not None or player_stat.get("innings_pitched") is not None:
-            candidates.append((player, player_stat, 0.0))
-            continue
+        gp = float(player_stat.get("games_played", 1) or 1)
 
-        # Edge = how far the player's season OPS deviates from league average (.720)
-        try:
-            ops = float(player_stat.get("ops") or 0)
-            league_avg_ops = 0.720
-            edge_pct = abs(ops - league_avg_ops) / league_avg_ops if league_avg_ops else 0.0
-        except Exception:
-            edge_pct = 0.0
+        # Map prop types to season per-game averages
+        hits = float(player_stat.get("hits", 0) or 0)
+        hr = float(player_stat.get("home_runs", 0) or 0)
+        rbi = float(player_stat.get("rbi", 0) or 0)
+        sb = float(player_stat.get("stolen_bases", 0) or 0)
+        k = float(player_stat.get("strikeouts", 0) or 0)
 
-        candidates.append((player, player_stat, edge_pct))
+        stat_map = {
+            "hits": hits / gp if gp else 0,
+            "total_bases": (hits + hr * 3) / gp if gp else 0,
+            "home_runs": hr / gp if gp else 0,
+            "rbi": rbi / gp if gp else 0,
+            "stolen_bases": sb / gp if gp else 0,
+            "runs": 0,  # hard to estimate
+            "strikeouts": k / max(float(player_stat.get("games_started", gp) or gp), 1),
+        }
 
-    # Sort by edge descending, keep only those with >= 8% edge, cap at 3
-    MIN_EDGE = 0.08
-    qualified = sorted(
-        [(p, s, e) for p, s, e in candidates if e >= MIN_EDGE or s.get("era") is not None or s.get("innings_pitched") is not None],
-        key=lambda x: x[2],
-        reverse=True,
-    )[:3]
+        for prop_type, line in props.items():
+            projected = stat_map.get(prop_type, 0)
+            if projected == 0 or line == 0:
+                continue
+            edge_pct = abs(projected - line) / line * 100
+            direction = "OVER" if projected > line else "UNDER"
 
-    # If smart filtering yields nothing, fall back to first 3 players provided
-    if not qualified:
-        logger.info("No props met 8%+ edge threshold — falling back to top players list")
-        qualified = [(p, next((s for s in top_stats if p.lower().split()[-1] in s.get("player_name", "").lower()), None), 0.0) for p in players[:3]]
+            if edge_pct >= 8:
+                prop_edges.append({
+                    "player": player,
+                    "prop_type": prop_type,
+                    "line": line,
+                    "projected": round(projected, 2),
+                    "edge_pct": round(edge_pct, 1),
+                    "direction": direction,
+                    "player_stat": player_stat,
+                })
 
-    for player, player_stat, edge_pct in qualified:
-        try:
-            art = await generate_player_prop(
-                player=player, home_team=home_team, away_team=away_team,
-                game_date=game_date, player_stats=player_stat,
-                injuries=injuries, top_stats=top_stats, over_under=over_under,
+    # Sort by edge, take top N
+    prop_edges.sort(key=lambda x: -x["edge_pct"])
+    best_props = prop_edges[:max_props]
+
+    if best_props:
+        logger.info(f"Found {len(prop_edges)} props with edge, publishing top {len(best_props)}")
+        for p in best_props:
+            logger.info(f"  {p['player']} {p['prop_type']}: line={p['line']}, proj={p['projected']}, edge={p['edge_pct']}%")
+    else:
+        logger.info("No props with 8%+ edge — falling back to top 3 players")
+
+    # Generate articles for best edge props, or fallback
+    if best_props:
+        for prop in best_props:
+            try:
+                art = await generate_player_prop(
+                    player=prop["player"], home_team=home_team, away_team=away_team,
+                    game_date=game_date, player_stats=prop["player_stat"],
+                    injuries=injuries, top_stats=top_stats, over_under=over_under,
+                )
+                art["edge_pct"] = prop["edge_pct"]
+                articles.append(art)
+            except Exception as e:
+                logger.error(f"Prop generation failed for {prop['player']}: {e}")
+    else:
+        # Fallback: generate for first 3 provided players
+        for player in players[:3]:
+            player_stat = stats_lookup.get(player) or next(
+                (s for s in top_stats if player.lower().split()[-1] in s.get("player_name", "").lower()), None
             )
-            if edge_pct >= MIN_EDGE:
-                art["edge_pct"] = round(edge_pct * 100, 1)
-            articles.append(art)
-        except Exception as e:
-            logger.error(f"Prop generation failed for {player}: {e}")
+            try:
+                art = await generate_player_prop(
+                    player=player, home_team=home_team, away_team=away_team,
+                    game_date=game_date, player_stats=player_stat,
+                    injuries=injuries, top_stats=top_stats, over_under=over_under,
+                )
+                articles.append(art)
+            except Exception as e:
+                logger.error(f"Prop generation failed for {player}: {e}")
 
     return articles
 
