@@ -576,17 +576,64 @@ async def generate_daily_props(
 
 # ── History Article ───────────────────────────────────────────────────────────
 
+async def _fetch_historical_reds_games(month: int, day: int) -> list:
+    """Fetch real Reds games played on this month/day across all years from ESPN."""
+    import httpx as _httpx
+    games = []
+    for year in range(1970, 2027):
+        try:
+            date_str = f"{year}{month:02d}{day:02d}"
+            async with _httpx.AsyncClient(timeout=5) as client:
+                r = await client.get(
+                    f"https://site.api.espn.com/apis/site/v2/sports/baseball/mlb/scoreboard?dates={date_str}",
+                    headers={"User-Agent": "Mozilla/5.0"}
+                )
+            if r.status_code != 200:
+                continue
+            data = r.json()
+            for ev in data.get("events", []):
+                comp = ev["competitions"][0]
+                competitors = comp.get("competitors", [])
+                teams = [c.get("team", {}).get("displayName", "") for c in competitors]
+                if not any("Reds" in t or "Cincinnati" in t for t in teams):
+                    continue
+                home = competitors[0]
+                away = competitors[1]
+                games.append(
+                    f"{year}: {away.get('team',{}).get('displayName','?')} {away.get('score','?')} "
+                    f"@ {home.get('team',{}).get('displayName','?')} {home.get('score','?')}"
+                )
+        except Exception:
+            continue
+    return games
+
+
 async def generate_history_article(today_str: str) -> dict:
     from datetime import datetime as dt
     d     = dt.strptime(today_str, "%Y-%m-%d")
     month = d.strftime("%B")
     day   = d.day
 
+    verified_games = await _fetch_historical_reds_games(d.month, d.day)
+
+    if verified_games:
+        games_block = "VERIFIED GAMES (from ESPN — these are the ONLY games you may reference):\n" + "\n".join(verified_games)
+    else:
+        games_block = "VERIFIED GAMES: No ESPN game data found for this date."
+
     prompt = f"""You are a Cincinnati Reds historian writing for RedsHub.
 
 Write a 400-500 word "This Day in Reds History" article for {month} {day}.
 
-Include 2-3 specific memorable moments, players, or games that happened on this date throughout Reds history. Be specific with years and stats. If nothing notable happened, write about a great Reds moment from this week in history.
+{games_block}
+
+CRITICAL RULES:
+- ONLY write about games from the VERIFIED GAMES list above. Do NOT invent games, opponents, or scores.
+- Do NOT fabricate statistics, player performances, or game outcomes not listed above.
+- If the verified games list is empty or sparse, focus on broader historical context about the Reds organization for this time of year — but do NOT invent specific game results.
+- You may add factual historical context about players or seasons that are documented (e.g., a player's career arc), but never claim a game happened unless it appears in the VERIFIED GAMES list.
+
+Include 2-3 specific memorable moments drawn only from the verified game data above. Be specific about the year and the score as listed.
 
 Use markdown headers (##). Write engagingly for a passionate Reds fan base."""
 
