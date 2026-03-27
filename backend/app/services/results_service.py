@@ -259,9 +259,9 @@ async def resolve_game_predictions(game_date: str) -> dict:
         raw_type   = (article.get("prop_type") or picks.get("prop_type") or picks.get("best_prop_type") or "").lower()
         prop_type  = PROP_TYPE_ALIASES.get(raw_type, raw_type) or "hits"
 
-        # Resolve the line
-        pick_str   = picks.get("pick") or picks.get(f"{prop_type}_pick") or picks.get("line") or ""
-        lean       = (picks.get("lean") or picks.get(f"{prop_type}_lean") or "").upper()
+        # Resolve the line — check multiple field name variants
+        pick_str   = picks.get("pick") or picks.get("prop_line") or picks.get(f"{prop_type}_pick") or picks.get("line") or ""
+        lean       = (picks.get("lean") or picks.get("prop_lean") or picks.get(f"{prop_type}_lean") or "").upper()
         line       = None
         try:
             line = float(str(pick_str).replace("Over", "").replace("Under", "").strip())
