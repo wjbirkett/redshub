@@ -39,16 +39,37 @@ async def _call_claude(prompt: str, system: str = None, max_tokens: int = 1200) 
     return resp.content[0].text
 
 
+def _is_knickshub_article(a: dict) -> bool:
+    """Check if an article belongs to KnicksHub (not RedsHub)."""
+    text = (
+        a.get("slug", "") + " " +
+        a.get("title", "") + " " +
+        a.get("home_team", "") + " " +
+        a.get("away_team", "") + " " +
+        a.get("player", "")
+    ).lower()
+    # Known KnicksHub players
+    knicks_players = {
+        "brunson", "towns", "bridges", "anunoby", "hart", "mcbride",
+        "robinson", "clarkson", "alvarado", "shamet", "kolek", "sochan",
+        "yabusele", "mccullar", "dadiet", "hukporti", "jemison",
+    }
+    if "knicks" in text or "new york kn" in text:
+        return True
+    # Check player last names
+    for kp in knicks_players:
+        if kp in text:
+            return True
+    return False
+
+
 async def get_articles(limit: int = 20):
     db = get_supabase()
     if not db:
         return []
     try:
-        # Fetch recent articles, exclude KnicksHub content from shared DB
         result = db.table("articles").select("*").order("game_date", desc=True).limit(limit * 3).execute()
-        rows = [r for r in (result.data or []) if
-            "knicks" not in (r.get("slug", "") + r.get("title", "")).lower()
-        ][:limit]
+        rows = [r for r in (result.data or []) if not _is_knickshub_article(r)][:limit]
     except Exception:
         rows = []
     return rows

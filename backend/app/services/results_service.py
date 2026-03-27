@@ -106,11 +106,10 @@ async def resolve_game_predictions(game_date: str) -> dict:
     if not db:
         return {"status": "no_db"}
 
+    from app.services.article_service import _is_knickshub_article
     all_articles = db.table("articles").select("*").eq("game_date", game_date).execute()
     # Filter to Reds articles only — exclude KnicksHub content from shared DB
-    reds_articles = [a for a in (all_articles.data or []) if
-        "knicks" not in (a.get("slug", "") + a.get("title", "")).lower()
-    ]
+    reds_articles = [a for a in (all_articles.data or []) if not _is_knickshub_article(a)]
     articles = type("Result", (), {"data": reds_articles})()
     if not articles.data:
         return {"status": "no_articles", "game_date": game_date}

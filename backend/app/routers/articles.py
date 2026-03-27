@@ -95,14 +95,15 @@ async def get_results():
         "Graham Ashcraft", "Frankie Montas", "Chase Burns", "Will Benson",
         "Noelvi Marte", "Ke'Bryan Hayes", "Matt McLain",
     }
+    knicks_terms = {"knicks", "brunson", "towns", "bridges", "anunoby", "hart", "hornets", "celtics", "cavaliers", "thunder", "lakers", "warriors"}
     try:
         pred_all = db.table("prediction_results").select("*").order("game_date", desc=True).execute()
         pred_reds = [p for p in (pred_all.data or []) if
-            p.get("site_id") == "redshub" or (
-                not p.get("site_id") and (
-                    "reds" in (p.get("opponent", "") + p.get("slug", "")).lower()
-                    or "cincinnati" in (p.get("opponent", "") + p.get("slug", "")).lower()
-                )
+            not any(t in (p.get("slug", "") + p.get("opponent", "")).lower() for t in knicks_terms)
+            and (
+                p.get("site_id") == "redshub" or
+                not p.get("site_id") or
+                "reds" in (p.get("slug", "") + p.get("opponent", "")).lower()
             )
         ]
         # Dedup by game_date
