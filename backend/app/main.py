@@ -50,3 +50,11 @@ app.include_router(articles.router,  prefix="/api/articles",  tags=["Articles"])
 @app.get("/health")
 async def health():
     return {"status": "ok", "service": "RedsHub API"}
+
+
+@app.get("/ip")
+async def get_outbound_ip():
+    import httpx
+    async with httpx.AsyncClient(timeout=10) as client:
+        r = await client.get("https://api.ipify.org?format=json")
+        return r.json()
