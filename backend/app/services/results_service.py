@@ -106,7 +106,13 @@ async def resolve_game_predictions(game_date: str) -> dict:
     if not db:
         return {"status": "no_db"}
 
-    articles = db.table("articles").select("*").eq("game_date", game_date).eq("site_id", "redshub").execute()
+    all_articles = db.table("articles").select("*").eq("game_date", game_date).execute()
+    # Filter to Reds articles only (shared DB may have KnicksHub articles)
+    reds_articles = [a for a in (all_articles.data or []) if
+        "reds" in (a.get("slug", "") + a.get("title", "")).lower()
+        or "cincinnati" in (a.get("slug", "") + a.get("title", "")).lower()
+    ]
+    articles = type("Result", (), {"data": reds_articles})()
     if not articles.data:
         return {"status": "no_articles", "game_date": game_date}
 
