@@ -1,9 +1,11 @@
-import asyncio, threading, os
+import asyncio, logging, threading, os
 from fastapi import APIRouter, HTTPException, BackgroundTasks, Request, Depends, Header
 from fastapi.responses import Response
 from slowapi import Limiter
 from slowapi.util import get_remote_address
 from datetime import date, timedelta
+
+logger = logging.getLogger(__name__)
 
 ADMIN_KEY = os.environ.get("ADMIN_API_KEY", "")
 IS_PRODUCTION = os.environ.get("RAILWAY_ENVIRONMENT", "") == "production" or os.environ.get("ENVIRONMENT", "") == "production"
@@ -88,28 +90,12 @@ async def get_results():
     db = get_supabase()
     if not db:
         return {"predictions": [], "props": []}
-    reds_players = {
-        "Elly De La Cruz", "TJ Friedl", "Spencer Steer", "Tyler Stephenson",
-        "Jonathan India", "Jake Fraley", "Jeimer Candelario", "Stuart Fairchild",
-        "Santiago Espinal", "Hunter Greene", "Nick Lodolo", "Andrew Abbott",
-        "Graham Ashcraft", "Frankie Montas", "Chase Burns", "Will Benson",
-        "Noelvi Marte", "Ke'Bryan Hayes", "Matt McLain",
-    }
-    knicks_terms = {"knicks", "brunson", "towns", "bridges", "anunoby", "hart", "hornets", "celtics", "cavaliers", "thunder", "lakers", "warriors"}
     try:
-        pred_all = db.table("prediction_results").select("*").order("game_date", desc=True).execute()
-        pred_reds = [p for p in (pred_all.data or []) if
-            not any(t in (p.get("slug", "") + p.get("opponent", "")).lower() for t in knicks_terms)
-            and (
-                p.get("site_id") == "redshub" or
-                not p.get("site_id") or
-                "reds" in (p.get("slug", "") + p.get("opponent", "")).lower()
-            )
-        ]
+        pred_result = db.table("prediction_results").select("*").eq("site_id", "redshub").order("game_date", desc=True).execute()
         # Dedup by game_date
         seen = set()
         pred_data = []
-        for p in pred_reds:
+        for p in (pred_result.data or []):
             if p.get("game_date") not in seen:
                 seen.add(p.get("game_date"))
                 pred_data.append(p)
@@ -117,12 +103,8 @@ async def get_results():
         logger.error(f"prediction_results query failed: {e}")
         pred_data = []
     try:
-        props_all = db.table("prop_results").select("*").order("game_date", desc=True).execute()
-        props_data = [p for p in (props_all.data or []) if
-            p.get("site_id") == "redshub" or (
-                not p.get("site_id") and p.get("player", "") in reds_players
-            )
-        ]
+        props_result = db.table("prop_results").select("*").eq("site_id", "redshub").order("game_date", desc=True).execute()
+        props_data = props_result.data or []
     except Exception as e:
         logger.error(f"prop_results query failed: {e}")
         props_data = []
@@ -158,24 +140,12 @@ async def backtest():
     db = get_supabase()
     if not db:
         return {"error": "No DB"}
-    reds_player_set = {
-        "Elly De La Cruz", "TJ Friedl", "Spencer Steer", "Tyler Stephenson",
-        "Jonathan India", "Jake Fraley", "Jeimer Candelario", "Stuart Fairchild",
-        "Santiago Espinal", "Hunter Greene", "Nick Lodolo", "Andrew Abbott",
-        "Graham Ashcraft", "Chase Burns", "Will Benson", "Noelvi Marte",
-    }
     try:
-        pred_all = db.table("prediction_results").select("*").execute()
-        reds_all = [p for p in (pred_all.data or []) if
-            p.get("site_id") == "redshub" or (
-                not p.get("site_id") and (
-                    "reds" in (p.get("opponent", "") + p.get("slug", "")).lower()
-                    or "cincinnati" in (p.get("opponent", "") + p.get("slug", "")).lower()
-                )
-            )
-        ]
+        pred_result = db.table("prediction_results").select("*").eq("site_id", "redshub").execute()
+        reds_all = pred_result.data or []
     except Exception:
         reds_all = []
+    # Dedup by game_date
     seen = set()
     reds_preds = []
     for p in reds_all:
@@ -184,12 +154,8 @@ async def backtest():
             reds_preds.append(p)
 
     try:
-        props_all = db.table("prop_results").select("*").execute()
-        reds_props = [p for p in (props_all.data or []) if
-            p.get("site_id") == "redshub" or (
-                not p.get("site_id") and p.get("player", "") in reds_player_set
-            )
-        ]
+        props_result = db.table("prop_results").select("*").eq("site_id", "redshub").execute()
+        reds_props = props_result.data or []
     except Exception:
         reds_props = []
 

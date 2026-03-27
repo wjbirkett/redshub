@@ -39,63 +39,23 @@ async def _call_claude(prompt: str, system: str = None, max_tokens: int = 1200) 
     return resp.content[0].text
 
 
-def _is_knickshub_article(a: dict) -> bool:
-    """Check if an article belongs to KnicksHub (not RedsHub)."""
-    text = (
-        a.get("slug", "") + " " +
-        a.get("title", "") + " " +
-        a.get("home_team", "") + " " +
-        a.get("away_team", "") + " " +
-        a.get("player", "")
-    ).lower()
-    # Known KnicksHub players
-    knicks_players = {
-        "brunson", "towns", "bridges", "anunoby", "hart", "mcbride",
-        "robinson", "clarkson", "alvarado", "shamet", "kolek", "sochan",
-        "yabusele", "mccullar", "dadiet", "hukporti", "jemison",
-    }
-    if "knicks" in text or "new york kn" in text:
-        return True
-    # Check player last names
-    for kp in knicks_players:
-        if kp in text:
-            return True
-    return False
-
-
 async def get_articles(limit: int = 20):
     db = get_supabase()
     if not db:
         return []
     try:
-        result = db.table("articles").select("*").order("game_date", desc=True).limit(limit * 3).execute()
-        rows = [r for r in (result.data or []) if not _is_knickshub_article(r)][:limit]
+        result = db.table("articles").select("*").eq("site_id", "redshub").order("game_date", desc=True).limit(limit).execute()
+        return result.data or []
     except Exception:
-        rows = []
-    return rows
+        return []
 
 
 async def get_article_by_slug(slug: str):
     db = get_supabase()
     if not db:
         return None
-    result = db.table("articles").select("*").eq("slug", slug).single().execute()
-    row = result.data
-    if not row:
-        return None
-    site = row.get("site_id")
-    if site == "knickshub":
-        # Block cross-site leakage
-        return None
-    if site is None:
-        # Legacy row with no site_id — apply Reds heuristic to block KnicksHub articles
-        teams = (row.get("home_team", "") + row.get("away_team", "")).lower()
-        if "knicks" in teams or "new york" in teams:
-            return None  # This is a KnicksHub article
-        return row
-    if site == "redshub":
-        return row
-    return None
+    result = db.table("articles").select("*").eq("slug", slug).eq("site_id", "redshub").single().execute()
+    return result.data or None
 
 
 async def save_article(article: dict) -> dict:

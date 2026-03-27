@@ -106,11 +106,7 @@ async def resolve_game_predictions(game_date: str) -> dict:
     if not db:
         return {"status": "no_db"}
 
-    from app.services.article_service import _is_knickshub_article
-    all_articles = db.table("articles").select("*").eq("game_date", game_date).execute()
-    # Filter to Reds articles only — exclude KnicksHub content from shared DB
-    reds_articles = [a for a in (all_articles.data or []) if not _is_knickshub_article(a)]
-    articles = type("Result", (), {"data": reds_articles})()
+    articles = db.table("articles").select("*").eq("site_id", "redshub").eq("game_date", game_date).execute()
     if not articles.data:
         return {"status": "no_articles", "game_date": game_date}
 
@@ -180,27 +176,11 @@ async def resolve_game_predictions(game_date: str) -> dict:
                     "resolved_at":     datetime.now(timezone.utc).isoformat(),
                     "site_id":         "redshub",
                 }
-                # Try full payload, then strip columns that may not exist in DB
-                saved = False
-                for remove_keys in [
-                    [],
-                    ["moneyline_pick", "moneyline_lean", "moneyline_result"],
-                    ["moneyline_pick", "moneyline_lean", "moneyline_result", "site_id"],
-                    ["moneyline_pick", "moneyline_lean", "moneyline_result", "site_id", "knicks_score", "opp_score"],
-                ]:
-                    try:
-                        payload = {k: v for k, v in upsert_data.items() if k not in remove_keys}
-                        db.table("prediction_results").upsert(payload, on_conflict="slug")
-                        resolved += 1
-                        saved = True
-                        if remove_keys:
-                            logger.info(f"Upsert succeeded after removing {remove_keys}")
-                        break
-                    except Exception as e2:
-                        logger.warning(f"Upsert failed (removed {remove_keys}): {e2}")
-                        continue
-                if not saved:
-                    logger.error(f"All upsert attempts failed for {article.get('slug')}")
+                try:
+                    db.table("prediction_results").upsert(upsert_data, on_conflict="slug")
+                    resolved += 1
+                except Exception as e2:
+                    logger.error(f"prediction_results upsert failed for {article.get('slug')}: {e2}")
 
     # ── Prop grading ──────────────────────────────────────────────────────────
     # MLB stat label mapping from ESPN box score to prop_type keys
@@ -300,17 +280,10 @@ async def resolve_game_predictions(game_date: str) -> dict:
             "resolved_at":  datetime.now(timezone.utc).isoformat(),
             "site_id":      "redshub",
         }
-        saved = False
-        for remove_keys in [[], ["site_id"], ["site_id", "actual_value"]]:
-            try:
-                payload = {k: v for k, v in prop_row.items() if k not in remove_keys}
-                db.table("prop_results").upsert(payload, on_conflict="slug")
-                props_resolved += 1
-                saved = True
-                break
-            except Exception as e:
-                logger.warning(f"prop upsert failed (removed {remove_keys}): {e}")
-        if not saved:
-            logger.error(f"All prop upsert attempts failed for {article.get('slug')}")
+        try:
+            db.table("prop_results").upsert(prop_row, on_conflict="slug")
+            props_resolved += 1
+        except Exception as e:
+            logger.error(f"prop_results upsert failed for {article.get('slug')}: {e}")
 
     return {"status": "resolved", "game_date": game_date, "resolved": resolved, "props_resolved": props_resolved}
