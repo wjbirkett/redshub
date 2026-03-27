@@ -398,31 +398,36 @@ export default function Dashboard() {
             </div>
           )}
 
-          {lastGame && (
-            <div style={{ background: S.surfaceHigh, borderRadius: "0.75rem", padding: "1.25rem", borderLeft: `4px solid ${S.green}`, display: "flex", flexDirection: "column", gap: "0.5rem" }}>
-              <span style={{ fontSize: "0.5625rem", fontWeight: 900, letterSpacing: "0.2rem", color: S.green, textTransform: "uppercase" }}>Last Result</span>
+          {lastGame && (() => {
+            const redsScore = lastGame.home_team?.includes("Reds") ? lastGame.home_score : lastGame.away_score;
+            const oppScore = lastGame.home_team?.includes("Reds") ? lastGame.away_score : lastGame.home_score;
+            const isWin = Number(redsScore) > Number(oppScore);
+            const wlColor = isWin ? S.green : "#ef4444";
+            const wlText = isWin ? "W" : "L";
+            return (
+            <div style={{ background: S.surfaceHigh, borderRadius: "0.75rem", padding: "1.25rem", borderLeft: `4px solid ${wlColor}`, display: "flex", flexDirection: "column", gap: "0.5rem" }}>
+              <span style={{ fontSize: "0.5625rem", fontWeight: 900, letterSpacing: "0.2rem", color: wlColor, textTransform: "uppercase" }}>Last Result</span>
               <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
                 <div>
                   <span style={{ display: "block", fontFamily: "Space Grotesk, sans-serif", fontWeight: 900, fontSize: "1.5rem" }}>
-                    {lastGame.home_team?.includes("Reds") ? lastGame.home_score : lastGame.away_score}
-                    {" - "}
-                    {lastGame.home_team?.includes("Reds") ? lastGame.away_score : lastGame.home_score}
+                    {redsScore} {" - "} {oppScore}
                   </span>
                   <span style={{ fontSize: "0.5625rem", fontWeight: 700, color: S.textMuted, textTransform: "uppercase" }}>
                     vs {opp(lastGame)}
                   </span>
                 </div>
                 <span style={{
-                  background: S.green, color: "#003915",
+                  background: wlColor, color: isWin ? "#003915" : "#fff",
                   padding: "0.25rem 0.625rem",
                   fontFamily: "Space Grotesk, sans-serif", fontWeight: 900, fontSize: "1.125rem",
                   borderRadius: "0.25rem", textTransform: "uppercase", fontStyle: "italic",
                 }}>
-                  {lastGame.result || "W"}
+                  {wlText}
                 </span>
               </div>
             </div>
-          )}
+            );
+          })()}
         </div>
 
         {/* Bottom Left: Predictions + News */}
