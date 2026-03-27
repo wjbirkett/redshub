@@ -10,6 +10,7 @@ const NAV = [
   { to: "/injuries",            label: "Injuries",      icon: "medical_services" },
   { to: "/schedule",            label: "Schedule",      icon: "calendar_month" },
   { to: "/stats",               label: "Stats",         icon: "leaderboard" },
+  { to: "/roster",              label: "Roster",        icon: "groups" },
 ];
 
 const MOBILE_NAV = [

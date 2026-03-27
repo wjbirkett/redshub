@@ -15,6 +15,7 @@ import MatchupArchivePage from "./pages/MatchupArchivePage";
 import PlayerPropsPage from "./pages/PlayerPropsPage";
 import PlayerArchivePage from "./pages/PlayerArchivePage";
 import OddsPage from "./pages/OddsPage";
+import RosterPage from "./pages/RosterPage";
 import AboutPage from "./pages/AboutPage";
 import TermsPage from "./pages/TermsPage";
 import PrivacyPage from "./pages/PrivacyPage";
@@ -66,6 +67,7 @@ export default function App() {
                 <Route path="/matchup/:opponent"       element={<MatchupArchivePage />} />
                 <Route path="/props"                   element={<PlayerPropsPage />} />
                 <Route path="/props/:player"           element={<PlayerArchivePage />} />
+                <Route path="/roster"                  element={<RosterPage />} />
                 <Route path="/odds"                    element={<OddsPage />} />
                 <Route path="/about"                   element={<AboutPage />} />
                 <Route path="/terms"                   element={<TermsPage />} />
