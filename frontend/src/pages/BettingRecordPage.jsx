@@ -36,6 +36,8 @@ export default function BettingRecordPage() {
   const rlTotal = preds.filter(r => r.spread_result).length;
   const ouHits  = preds.filter(r => r.total_result === "HIT").length;
   const ouTotal = preds.filter(r => r.total_result).length;
+  const mlHits  = preds.filter(r => r.moneyline_result === "HIT").length;
+  const mlTotal = preds.filter(r => r.moneyline_result).length;
   const phHits  = propRes.filter(r => r.result === "HIT").length;
 
   return (
@@ -50,9 +52,10 @@ export default function BettingRecordPage() {
       {isLoading && <p style={{ color: S.textMuted }}>Loading record…</p>}
 
       {/* Summary boxes */}
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: "1rem", marginBottom: "2rem" }}>
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(140px, 1fr))", gap: "1rem", marginBottom: "2rem" }}>
         <StatBox hits={rlHits}  total={rlTotal}       label="Run Line (RL)" />
         <StatBox hits={ouHits}  total={ouTotal}        label="Over/Under" />
+        <StatBox hits={mlHits}  total={mlTotal}        label="Moneyline" />
         <StatBox hits={phHits}  total={propRes.length} label="Player Props" />
       </div>
 
@@ -93,9 +96,12 @@ export default function BettingRecordPage() {
             {preds.map((r, i) => (
               <div key={i} style={{ background: S.surface, borderRadius: "0.5rem", padding: "0.875rem 1.25rem", border: `1px solid ${S.border}`, display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: "0.5rem" }}>
                 <div>
-                  <span style={{ fontFamily: "Space Grotesk, sans-serif", fontWeight: 700, fontSize: "0.9375rem", color: S.text }}>{r.home_team ?? "CIN"} vs {r.away_team ?? "OPP"}</span>
+                  <span style={{ fontFamily: "Space Grotesk, sans-serif", fontWeight: 700, fontSize: "0.9375rem", color: S.text }}>
+                    Reds vs {r.opponent || "OPP"}
+                  </span>
                   <span style={{ display: "block", fontSize: "0.625rem", color: S.textMuted, textTransform: "uppercase", letterSpacing: "0.1em" }}>
                     {r.game_date ? new Date(r.game_date + "T12:00:00").toLocaleDateString("en-US", { month: "short", day: "numeric" }) : ""}
+                    {r.knicks_score != null && r.opp_score != null ? ` · ${r.knicks_score}-${r.opp_score}` : ""}
                   </span>
                 </div>
                 <div style={{ display: "flex", gap: "0.5rem" }}>
@@ -107,6 +113,11 @@ export default function BettingRecordPage() {
                   {r.total_result && (
                     <span style={{ background: r.total_result === "HIT" ? S.greenBg : S.missBg, color: r.total_result === "HIT" ? S.hitGreen : "#ffdad6", padding: "0.1875rem 0.625rem", fontFamily: "Space Grotesk, sans-serif", fontWeight: 900, fontSize: "0.6875rem", textTransform: "uppercase", letterSpacing: "0.1em", borderRadius: "0.25rem" }}>
                       O/U: {r.total_result}
+                    </span>
+                  )}
+                  {r.moneyline_result && (
+                    <span style={{ background: r.moneyline_result === "HIT" ? S.greenBg : S.missBg, color: r.moneyline_result === "HIT" ? S.hitGreen : "#ffdad6", padding: "0.1875rem 0.625rem", fontFamily: "Space Grotesk, sans-serif", fontWeight: 900, fontSize: "0.6875rem", textTransform: "uppercase", letterSpacing: "0.1em", borderRadius: "0.25rem" }}>
+                      ML: {r.moneyline_result}
                     </span>
                   )}
                 </div>
