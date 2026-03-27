@@ -117,11 +117,14 @@ async def resolve_game_predictions(game_date: str) -> dict:
     reds_margin  = reds_score - opp_score
 
     resolved = 0
+    logger.info(f"Resolving {len(articles.data)} articles for {game_date}, result: {result}")
     for article in articles.data:
         picks = article.get("key_picks") or {}
         if not isinstance(picks, dict):
+            logger.info(f"  Skipping {article.get('slug')} — key_picks not a dict: {type(picks).__name__}")
             continue
         art_type = article.get("article_type", "")
+        logger.info(f"  Article: {article.get('slug')} type={art_type} picks={picks}")
 
         if art_type in ("prediction", "best_bet"):
             spread_result = None
@@ -177,14 +180,24 @@ async def resolve_game_predictions(game_date: str) -> dict:
                     db.table("prediction_results").upsert(upsert_data, on_conflict="slug")
                     resolved += 1
                 except Exception as e:
-                    # Try without moneyline columns
-                    try:
-                        for k in ["moneyline_pick", "moneyline_lean", "moneyline_result"]:
-                            upsert_data.pop(k, None)
-                        db.table("prediction_results").upsert(upsert_data, on_conflict="slug")
-                        resolved += 1
-                    except Exception as e2:
-                        logger.error(f"Results upsert failed: {e2}")
+                    logger.warning(f"Full upsert failed: {e}")
+                    # Try progressively smaller payloads
+                    for remove_keys in [
+                        ["moneyline_pick", "moneyline_lean", "moneyline_result"],
+                        ["moneyline_pick", "moneyline_lean", "moneyline_result", "site_id"],
+                        ["moneyline_pick", "moneyline_lean", "moneyline_result", "site_id", "knicks_score", "opp_score"],
+                    ]:
+                        try:
+                            minimal = {k: v for k, v in upsert_data.items() if k not in remove_keys}
+                            db.table("prediction_results").upsert(minimal, on_conflict="slug")
+                            resolved += 1
+                            logger.info(f"Upsert succeeded after removing {remove_keys}")
+                            break
+                        except Exception as e2:
+                            logger.warning(f"Reduced upsert also failed (removed {remove_keys}): {e2}")
+                            continue
+                    else:
+                        logger.error(f"All upsert attempts failed for {article.get('slug')}")
 
     # ── Prop grading ──────────────────────────────────────────────────────────
     # MLB stat label mapping from ESPN box score to prop_type keys
