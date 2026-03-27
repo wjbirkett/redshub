@@ -1,7 +1,7 @@
 import { useQuery } from "@tanstack/react-query";
 import { Helmet } from "react-helmet-async";
 import { getInjuries } from "../utils/api";
-import { getPlayerImage } from "../utils/playerImages";
+import { usePlayerImages } from "../utils/playerImages";
 
 const S = {
   bg: "#0f0f0f", surface: "#1a1a1a", surfaceHigh: "#242424",
@@ -19,6 +19,7 @@ const STATUS_COLOR = (status = "") => {
 
 export default function InjuriesPage() {
   const { data: injuries, isLoading } = useQuery({ queryKey: ["injuries"], queryFn: getInjuries });
+  const { getPlayerImage } = usePlayerImages();
 
   return (
     <div style={{ padding: "1.5rem 2rem", maxWidth: "800px" }}>

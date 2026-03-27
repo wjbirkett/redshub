@@ -2,7 +2,7 @@ import { useQuery } from "@tanstack/react-query";
 import { Link } from "react-router-dom";
 import { Helmet } from "react-helmet-async";
 import { getArticles, getResults } from "../utils/api";
-import { getPlayerImage } from "../utils/playerImages";
+import { usePlayerImages } from "../utils/playerImages";
 
 const S = {
   surface: "#1a1a1a", surfaceHigh: "#242424",
@@ -12,33 +12,44 @@ const S = {
   text: "#f0ebe8", textMuted: "#c9b8ae",
 };
 
-// Key Reds players for props
-const REDS_PLAYERS = [
-  "Elly De La Cruz", "TJ Friedl", "Spencer Steer",
-  "Tyler Stephenson", "Jonathan India", "Jake Fraley",
-  "Hunter Greene", "Nick Lodolo", "Graham Ashcraft",
-];
+// Non-pitcher positions for prop display
+const PROP_POSITIONS = new Set(["C", "1B", "2B", "3B", "SS", "LF", "CF", "RF", "DH", "OF"]);
 
 export default function PlayerPropsPage() {
   const { data: articles } = useQuery({ queryKey: ["articles"], queryFn: () => getArticles(50) });
   const { data: results  } = useQuery({ queryKey: ["results"],  queryFn: getResults });
+  const { getPlayerImage, roster } = usePlayerImages();
 
   const propArticles = articles?.filter(a => a.article_type === "prop") ?? [];
   const propResults  = results?.props ?? [];
 
+  // Build player list from roster (position players) + any players with prop results
+  const rosterPlayers = roster.filter(p => PROP_POSITIONS.has(p.position)).map(p => p.name);
+  const resultPlayers = [...new Set(propResults.map(r => r.player).filter(Boolean))];
+  const allPlayers = [...new Set([...rosterPlayers, ...resultPlayers])];
+
   // Group by player
   const byPlayer = {};
-  REDS_PLAYERS.forEach(name => {
+  allPlayers.forEach(name => {
+    const lastName = name.split(" ").pop().toLowerCase();
     const playerArticles = propArticles.filter(a =>
-      a.player?.toLowerCase().includes(name.split(" ").pop().toLowerCase()) ||
-      a.title?.toLowerCase().includes(name.split(" ").pop().toLowerCase())
+      a.player?.toLowerCase().includes(lastName) ||
+      a.title?.toLowerCase().includes(lastName)
     );
     const playerResults = propResults.filter(r =>
-      (r.player ?? "").toLowerCase().includes(name.split(" ").pop().toLowerCase())
+      (r.player ?? "").toLowerCase().includes(lastName)
     );
     const hits  = playerResults.filter(r => r.result === "HIT").length;
     const total = playerResults.length;
     byPlayer[name] = { articles: playerArticles, hits, total };
+  });
+
+  // Sort: players with results first (by total desc), then alphabetical
+  const sortedPlayers = allPlayers.sort((a, b) => {
+    const aTotal = byPlayer[a]?.total ?? 0;
+    const bTotal = byPlayer[b]?.total ?? 0;
+    if (bTotal !== aTotal) return bTotal - aTotal;
+    return a.localeCompare(b);
   });
 
   return (
@@ -91,7 +102,7 @@ export default function PlayerPropsPage() {
           Player Archives
         </h3>
         <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(200px, 1fr))", gap: "0.75rem" }}>
-          {REDS_PLAYERS.map(name => {
+          {sortedPlayers.map(name => {
             const { hits, total } = byPlayer[name];
             const slug = name.toLowerCase().replace(/\s+/g, "-");
             const good = total > 0 && hits / total >= 0.5;
