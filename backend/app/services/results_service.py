@@ -10,32 +10,65 @@ REDS_ESPN_ID    = "17"
 
 
 async def fetch_game_result(game_date: str) -> dict | None:
-    """Fetch final score for a Reds game on game_date (YYYY-MM-DD)."""
+    """Fetch final score for a Reds game on game_date (YYYY-MM-DD).
+    Tries scoreboard first, then falls back to team schedule."""
     ds = game_date.replace("-", "")
+
+    # Try scoreboard first (works for recent games)
     try:
         async with httpx.AsyncClient(timeout=15) as client:
             r = await client.get(f"{ESPN_SCOREBOARD}?dates={ds}")
             data = r.json()
+        for event in data.get("events", []):
+            comp        = event.get("competitions", [{}])[0]
+            competitors = comp.get("competitors", [])
+            ids         = [c.get("team", {}).get("id") for c in competitors]
+            if REDS_ESPN_ID not in ids:
+                continue
+            if not comp.get("status", {}).get("type", {}).get("completed", False):
+                continue
+            home = next((c for c in competitors if c.get("homeAway") == "home"), {})
+            away = next((c for c in competitors if c.get("homeAway") == "away"), {})
+            return {
+                "home_team":  home.get("team", {}).get("displayName", ""),
+                "away_team":  away.get("team", {}).get("displayName", ""),
+                "home_score": int(home.get("score", 0) or 0),
+                "away_score": int(away.get("score", 0) or 0),
+            }
     except Exception as e:
         logger.error(f"Scoreboard fetch failed: {e}")
-        return None
 
-    for event in data.get("events", []):
-        comp        = event.get("competitions", [{}])[0]
-        competitors = comp.get("competitors", [])
-        ids         = [c.get("team", {}).get("id") for c in competitors]
-        if REDS_ESPN_ID not in ids:
-            continue
-        if not comp.get("status", {}).get("type", {}).get("completed", False):
-            continue
-        home = next((c for c in competitors if c.get("homeAway") == "home"), {})
-        away = next((c for c in competitors if c.get("homeAway") == "away"), {})
-        return {
-            "home_team":  home.get("team", {}).get("displayName", ""),
-            "away_team":  away.get("team", {}).get("displayName", ""),
-            "home_score": int(home.get("score", 0) or 0),
-            "away_score": int(away.get("score", 0) or 0),
-        }
+    # Fallback: team schedule (always has completed games)
+    try:
+        async with httpx.AsyncClient(timeout=15) as client:
+            r = await client.get(f"https://site.api.espn.com/apis/site/v2/sports/baseball/mlb/teams/{REDS_ESPN_ID}/schedule")
+            data = r.json()
+        for event in data.get("events", []):
+            event_date = event.get("date", "")[:10]
+            if event_date != game_date:
+                continue
+            comp        = event.get("competitions", [{}])[0]
+            competitors = comp.get("competitors", [])
+            status_name = comp.get("status", {}).get("type", {}).get("name", "")
+            if "FINAL" not in status_name:
+                continue
+            home = next((c for c in competitors if c.get("homeAway") == "home"), {})
+            away = next((c for c in competitors if c.get("homeAway") == "away"), {})
+            home_score = home.get("score")
+            away_score = away.get("score")
+            if isinstance(home_score, dict):
+                home_score = home_score.get("value", 0)
+            if isinstance(away_score, dict):
+                away_score = away_score.get("value", 0)
+            return {
+                "home_team":  home.get("team", {}).get("displayName", ""),
+                "away_team":  away.get("team", {}).get("displayName", ""),
+                "home_score": int(home_score or 0),
+                "away_score": int(away_score or 0),
+            }
+    except Exception as e:
+        logger.error(f"Team schedule fetch failed: {e}")
+
     return None
 
 
