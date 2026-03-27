@@ -81,11 +81,18 @@ async def get_results():
         pred = db.table("prediction_results").select("*").order("game_date", desc=True).execute()
         # Filter to Reds games client-side (or_() with ilike is unreliable)
         # Filter: check opponent, home_team, away_team, and slug for Reds indicators
-        pred_data = [p for p in (pred.data or []) if
+        pred_reds = [p for p in (pred.data or []) if
             "reds" in (p.get("home_team", "") + p.get("away_team", "") + p.get("opponent", "") + p.get("slug", "")).lower()
             or "cincinnati" in (p.get("home_team", "") + p.get("away_team", "") + p.get("opponent", "")).lower()
             or any(kw in p.get("slug", "").lower() for kw in ["reds", "cincinnati"])
         ]
+        # Dedup by game_date (best_bet + prediction create separate rows for same game)
+        seen = set()
+        pred_data = []
+        for p in pred_reds:
+            if p.get("game_date") not in seen:
+                seen.add(p.get("game_date"))
+                pred_data.append(p)
     except Exception:
         pred_data = []
     try:
@@ -136,8 +143,17 @@ async def backtest():
     pred = db.table("prediction_results").select("*").execute()
     props = db.table("prop_results").select("*").execute()
 
-    # Filter to Reds
-    reds_preds = [p for p in (pred.data or []) if "reds" in (p.get("home_team", "") + p.get("away_team", "")).lower()]
+    # Filter to Reds + dedup by game_date
+    reds_all = [p for p in (pred.data or []) if
+        "reds" in (p.get("home_team", "") + p.get("away_team", "") + p.get("opponent", "") + p.get("slug", "")).lower()
+        or "cincinnati" in (p.get("home_team", "") + p.get("away_team", "") + p.get("opponent", "")).lower()
+    ]
+    seen = set()
+    reds_preds = []
+    for p in reds_all:
+        if p.get("game_date") not in seen:
+            seen.add(p.get("game_date"))
+            reds_preds.append(p)
     reds_props = [p for p in (props.data or []) if p.get("player", "") in [
         "Elly De La Cruz", "TJ Friedl", "Spencer Steer", "Tyler Stephenson",
         "Jonathan India", "Jake Fraley", "Jeimer Candelario"
