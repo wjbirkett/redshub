@@ -11,8 +11,7 @@ IS_PRODUCTION = os.environ.get("RAILWAY_ENVIRONMENT", "") == "production" or os.
 
 async def verify_admin(x_admin_key: str = Header(None)):
     if not ADMIN_KEY:
-        if IS_PRODUCTION:
-            raise HTTPException(status_code=403, detail="Admin key not configured")
+        # Allow admin access when no key is configured (set ADMIN_API_KEY to lock down)
         return
     if x_admin_key != ADMIN_KEY:
         raise HTTPException(status_code=403, detail="Unauthorized")
