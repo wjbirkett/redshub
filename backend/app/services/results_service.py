@@ -176,28 +176,27 @@ async def resolve_game_predictions(game_date: str) -> dict:
                     "resolved_at":     datetime.now(timezone.utc).isoformat(),
                     "site_id":         "redshub",
                 }
-                try:
-                    db.table("prediction_results").upsert(upsert_data, on_conflict="slug")
-                    resolved += 1
-                except Exception as e:
-                    logger.warning(f"Full upsert failed: {e}")
-                    # Try progressively smaller payloads
-                    for remove_keys in [
-                        ["moneyline_pick", "moneyline_lean", "moneyline_result"],
-                        ["moneyline_pick", "moneyline_lean", "moneyline_result", "site_id"],
-                        ["moneyline_pick", "moneyline_lean", "moneyline_result", "site_id", "knicks_score", "opp_score"],
-                    ]:
-                        try:
-                            minimal = {k: v for k, v in upsert_data.items() if k not in remove_keys}
-                            db.table("prediction_results").upsert(minimal, on_conflict="slug")
-                            resolved += 1
+                # Try full payload, then strip columns that may not exist in DB
+                saved = False
+                for remove_keys in [
+                    [],
+                    ["moneyline_pick", "moneyline_lean", "moneyline_result"],
+                    ["moneyline_pick", "moneyline_lean", "moneyline_result", "site_id"],
+                    ["moneyline_pick", "moneyline_lean", "moneyline_result", "site_id", "knicks_score", "opp_score"],
+                ]:
+                    try:
+                        payload = {k: v for k, v in upsert_data.items() if k not in remove_keys}
+                        db.table("prediction_results").upsert(payload, on_conflict="slug")
+                        resolved += 1
+                        saved = True
+                        if remove_keys:
                             logger.info(f"Upsert succeeded after removing {remove_keys}")
-                            break
-                        except Exception as e2:
-                            logger.warning(f"Reduced upsert also failed (removed {remove_keys}): {e2}")
-                            continue
-                    else:
-                        logger.error(f"All upsert attempts failed for {article.get('slug')}")
+                        break
+                    except Exception as e2:
+                        logger.warning(f"Upsert failed (removed {remove_keys}): {e2}")
+                        continue
+                if not saved:
+                    logger.error(f"All upsert attempts failed for {article.get('slug')}")
 
     # ── Prop grading ──────────────────────────────────────────────────────────
     # MLB stat label mapping from ESPN box score to prop_type keys

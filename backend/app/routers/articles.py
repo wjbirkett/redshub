@@ -88,41 +88,42 @@ async def get_results():
     db = get_supabase()
     if not db:
         return {"predictions": [], "props": []}
+    reds_players = {
+        "Elly De La Cruz", "TJ Friedl", "Spencer Steer", "Tyler Stephenson",
+        "Jonathan India", "Jake Fraley", "Jeimer Candelario", "Stuart Fairchild",
+        "Santiago Espinal", "Hunter Greene", "Nick Lodolo", "Andrew Abbott",
+        "Graham Ashcraft", "Frankie Montas", "Chase Burns", "Will Benson",
+        "Noelvi Marte", "Ke'Bryan Hayes", "Matt McLain",
+    }
     try:
-        pred = db.table("prediction_results").select("*").eq("site_id", "redshub").order("game_date", desc=True).execute()
-        pred_reds = pred.data or []
-        if not pred_reds:
-            # Legacy fallback: rows without site_id, filtered by team/slug heuristic
-            pred_all = db.table("prediction_results").select("*").order("game_date", desc=True).execute()
-            pred_reds = [p for p in (pred_all.data or []) if
+        pred_all = db.table("prediction_results").select("*").order("game_date", desc=True).execute()
+        pred_reds = [p for p in (pred_all.data or []) if
+            p.get("site_id") == "redshub" or (
                 not p.get("site_id") and (
-                    "reds" in (p.get("home_team", "") + p.get("away_team", "") + p.get("opponent", "") + p.get("slug", "")).lower()
-                    or "cincinnati" in (p.get("home_team", "") + p.get("away_team", "") + p.get("opponent", "")).lower()
+                    "reds" in (p.get("opponent", "") + p.get("slug", "")).lower()
+                    or "cincinnati" in (p.get("opponent", "") + p.get("slug", "")).lower()
                 )
-            ]
-        # Dedup by game_date (best_bet + prediction create separate rows for same game)
+            )
+        ]
+        # Dedup by game_date
         seen = set()
         pred_data = []
         for p in pred_reds:
             if p.get("game_date") not in seen:
                 seen.add(p.get("game_date"))
                 pred_data.append(p)
-    except Exception:
+    except Exception as e:
+        logger.error(f"prediction_results query failed: {e}")
         pred_data = []
     try:
-        props = db.table("prop_results").select("*").eq("site_id", "redshub").order("game_date", desc=True).execute()
-        props_data = props.data or []
-        if not props_data:
-            # Legacy fallback: filter by known Reds player list
-            reds_players = {
-                "Elly De La Cruz", "TJ Friedl", "Spencer Steer", "Tyler Stephenson",
-                "Jonathan India", "Jake Fraley", "Jeimer Candelario", "Stuart Fairchild",
-                "Santiago Espinal", "Hunter Greene", "Nick Lodolo", "Andrew Abbott",
-                "Graham Ashcraft", "Frankie Montas",
-            }
-            props_all = db.table("prop_results").select("*").order("game_date", desc=True).execute()
-            props_data = [p for p in (props_all.data or []) if not p.get("site_id") and p.get("player") in reds_players]
-    except Exception:
+        props_all = db.table("prop_results").select("*").order("game_date", desc=True).execute()
+        props_data = [p for p in (props_all.data or []) if
+            p.get("site_id") == "redshub" or (
+                not p.get("site_id") and p.get("player", "") in reds_players
+            )
+        ]
+    except Exception as e:
+        logger.error(f"prop_results query failed: {e}")
         props_data = []
     return {"predictions": pred_data, "props": props_data}
 
@@ -156,17 +157,24 @@ async def backtest():
     db = get_supabase()
     if not db:
         return {"error": "No DB"}
-    # Filter for Reds games only — prefer site_id, fall back to heuristic for legacy rows
-    pred = db.table("prediction_results").select("*").eq("site_id", "redshub").execute()
-    reds_all = pred.data or []
-    if not reds_all:
-        pred_legacy = db.table("prediction_results").select("*").execute()
-        reds_all = [p for p in (pred_legacy.data or []) if
-            not p.get("site_id") and (
-                "reds" in (p.get("home_team", "") + p.get("away_team", "") + p.get("opponent", "") + p.get("slug", "")).lower()
-                or "cincinnati" in (p.get("home_team", "") + p.get("away_team", "") + p.get("opponent", "")).lower()
+    reds_player_set = {
+        "Elly De La Cruz", "TJ Friedl", "Spencer Steer", "Tyler Stephenson",
+        "Jonathan India", "Jake Fraley", "Jeimer Candelario", "Stuart Fairchild",
+        "Santiago Espinal", "Hunter Greene", "Nick Lodolo", "Andrew Abbott",
+        "Graham Ashcraft", "Chase Burns", "Will Benson", "Noelvi Marte",
+    }
+    try:
+        pred_all = db.table("prediction_results").select("*").execute()
+        reds_all = [p for p in (pred_all.data or []) if
+            p.get("site_id") == "redshub" or (
+                not p.get("site_id") and (
+                    "reds" in (p.get("opponent", "") + p.get("slug", "")).lower()
+                    or "cincinnati" in (p.get("opponent", "") + p.get("slug", "")).lower()
+                )
             )
         ]
+    except Exception:
+        reds_all = []
     seen = set()
     reds_preds = []
     for p in reds_all:
@@ -174,15 +182,15 @@ async def backtest():
             seen.add(p.get("game_date"))
             reds_preds.append(p)
 
-    props = db.table("prop_results").select("*").eq("site_id", "redshub").execute()
-    reds_props = props.data or []
-    if not reds_props:
-        reds_player_set = {
-            "Elly De La Cruz", "TJ Friedl", "Spencer Steer", "Tyler Stephenson",
-            "Jonathan India", "Jake Fraley", "Jeimer Candelario",
-        }
-        props_legacy = db.table("prop_results").select("*").execute()
-        reds_props = [p for p in (props_legacy.data or []) if not p.get("site_id") and p.get("player", "") in reds_player_set]
+    try:
+        props_all = db.table("prop_results").select("*").execute()
+        reds_props = [p for p in (props_all.data or []) if
+            p.get("site_id") == "redshub" or (
+                not p.get("site_id") and p.get("player", "") in reds_player_set
+            )
+        ]
+    except Exception:
+        reds_props = []
 
     # Simple ROI calc
     win_payout = 100 / 110  # -110 odds
