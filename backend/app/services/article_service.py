@@ -43,16 +43,28 @@ async def get_articles(limit: int = 20):
     db = get_supabase()
     if not db:
         return []
-    # Filter by site_id first; fall back to team-name heuristic for legacy rows
+    # Filter by site_id first; fall back to slug heuristic for legacy rows
     try:
         result = db.table("articles").select("*").eq("site_id", "redshub").order("game_date", desc=True).limit(limit).execute()
         rows = result.data or []
     except Exception:
         rows = []
     if not rows:
-        # Legacy fallback: rows without site_id, filtered by team name
-        result = db.table("articles").select("*").or_("home_team.ilike.%Reds%,away_team.ilike.%Reds%,home_team.ilike.%Cincinnati%,away_team.ilike.%Cincinnati%").order("game_date", desc=True).limit(limit).execute()
-        rows = [r for r in (result.data or []) if not r.get("site_id") or r.get("site_id") == "redshub"]
+        try:
+            # Legacy fallback: fetch recent articles and filter client-side for Reds content
+            result = db.table("articles").select("*").order("game_date", desc=True).limit(limit * 3).execute()
+            rows = [r for r in (result.data or []) if
+                not r.get("site_id") or r.get("site_id") == "redshub"
+            ]
+            # Filter further by slug/title containing reds/cincinnati
+            if rows:
+                rows = [r for r in rows if
+                    r.get("site_id") == "redshub" or
+                    "reds" in (r.get("slug", "") + r.get("title", "")).lower() or
+                    "cincinnati" in (r.get("slug", "") + r.get("title", "")).lower()
+                ][:limit]
+        except Exception:
+            rows = []
     return rows
 
 
