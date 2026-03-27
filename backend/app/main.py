@@ -29,9 +29,15 @@ app = FastAPI(
 app.state.limiter = limiter
 app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 
+# Always include production domains
+_origins = list(settings.ALLOWED_ORIGINS) if settings.ALLOWED_ORIGINS else []
+for domain in ["https://redshub.vercel.app", "http://localhost:5173"]:
+    if domain not in _origins:
+        _origins.append(domain)
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=settings.ALLOWED_ORIGINS,
+    allow_origins=_origins,
     allow_credentials=False,
     allow_methods=["*"],
     allow_headers=["*"],
