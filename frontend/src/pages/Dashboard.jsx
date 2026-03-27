@@ -2,7 +2,7 @@ import { useQuery } from "@tanstack/react-query";
 import { Link } from "react-router-dom";
 import { Helmet } from "react-helmet-async";
 import { getNews, getInjuries, getBirthdays, getSchedule, getStandings, getArticles, getResults } from "../utils/api";
-import { usePlayerImages } from "../utils/playerImages";
+import { getPlayerImage } from "../utils/playerImages";
 import AdBanner from "../components/AdBanner";
 
 // Reds design tokens
@@ -50,7 +50,6 @@ const badge = (type) => {
 };
 
 export default function Dashboard() {
-  const { getPlayerImage } = usePlayerImages();
   const { data: news }      = useQuery({ queryKey: ["news"],      queryFn: () => getNews(undefined) });
   const { data: injuries }  = useQuery({ queryKey: ["injuries"],  queryFn: getInjuries });
   const { data: birthdays } = useQuery({ queryKey: ["birthdays"], queryFn: getBirthdays });

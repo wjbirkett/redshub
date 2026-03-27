@@ -2,7 +2,7 @@ import { useQuery } from "@tanstack/react-query";
 import { useParams, Link } from "react-router-dom";
 import { Helmet } from "react-helmet-async";
 import { getArticles, getResults } from "../utils/api";
-import { usePlayerImages } from "../utils/playerImages";
+import { getPlayerImage } from "../utils/playerImages";
 
 const S = {
   surface: "#1a1a1a", surfaceHigh: "#242424",
@@ -17,7 +17,6 @@ export default function PlayerArchivePage() {
   const displayName = player?.split("-").map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(" ");
   const lastName    = displayName?.split(" ").pop()?.toLowerCase() ?? "";
 
-  const { getPlayerImage } = usePlayerImages();
   const { data: articles } = useQuery({ queryKey: ["articles"], queryFn: () => getArticles(100) });
   const { data: results  } = useQuery({ queryKey: ["results"],  queryFn: getResults });
 

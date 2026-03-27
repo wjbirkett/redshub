@@ -1,7 +1,7 @@
 import { useQuery } from "@tanstack/react-query";
 import { Helmet } from "react-helmet-async";
 import { getStats } from "../utils/api";
-import { usePlayerImages } from "../utils/playerImages";
+import { getPlayerImage } from "../utils/playerImages";
 
 const S = {
   surface: "#1a1a1a", surfaceHigh: "#242424", border: "rgba(255,255,255,0.08)",
@@ -10,7 +10,6 @@ const S = {
 
 export default function StatsPage() {
   const { data: stats, isLoading } = useQuery({ queryKey: ["stats"], queryFn: getStats });
-  const { getPlayerImage } = usePlayerImages();
 
   const batters  = stats?.filter(p => p.at_bats > 0 || p.avg != null).slice(0, 15) ?? [];
   const pitchers = stats?.filter(p => p.era  != null).slice(0, 10) ?? [];

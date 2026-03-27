@@ -111,7 +111,7 @@ def generate_article(force: bool = False):
                 logger.info("Cron: could not find Reds game in schedule")
                 return
 
-            gd   = str(today)
+            gd   = str(get_date(next_game))
             slug = slugify(f"{next_game['away_team']}-vs-{next_game['home_team']}-prediction-{gd}")
             # Check by slug AND by site_id+game_date to prevent duplicate generation
             if not force:

@@ -2,7 +2,7 @@ import { useQuery } from "@tanstack/react-query";
 import { Link } from "react-router-dom";
 import { Helmet } from "react-helmet-async";
 import { getArticles, getResults } from "../utils/api";
-import { usePlayerImages } from "../utils/playerImages";
+import { getPlayerImage } from "../utils/playerImages";
 
 const S = {
   surface: "#1a1a1a", surfaceHigh: "#242424",
@@ -12,25 +12,23 @@ const S = {
   text: "#f0ebe8", textMuted: "#c9b8ae",
 };
 
-// Non-pitcher positions for prop display
-const PROP_POSITIONS = new Set(["C", "1B", "2B", "3B", "SS", "LF", "CF", "RF", "DH", "OF"]);
+const REDS_PLAYERS = [
+  "Elly De La Cruz", "TJ Friedl", "Spencer Steer",
+  "Tyler Stephenson", "Jonathan India", "Jake Fraley",
+  "Noelvi Marte", "Ke'Bryan Hayes", "Will Benson",
+  "Hunter Greene", "Nick Lodolo", "Graham Ashcraft", "Andrew Abbott",
+];
 
 export default function PlayerPropsPage() {
   const { data: articles } = useQuery({ queryKey: ["articles"], queryFn: () => getArticles(50) });
   const { data: results  } = useQuery({ queryKey: ["results"],  queryFn: getResults });
-  const { getPlayerImage, roster } = usePlayerImages();
 
   const propArticles = articles?.filter(a => a.article_type === "prop") ?? [];
   const propResults  = results?.props ?? [];
 
-  // Build player list from roster (position players) + any players with prop results
-  const rosterPlayers = roster.filter(p => PROP_POSITIONS.has(p.position)).map(p => p.name);
-  const resultPlayers = [...new Set(propResults.map(r => r.player).filter(Boolean))];
-  const allPlayers = [...new Set([...rosterPlayers, ...resultPlayers])];
-
   // Group by player
   const byPlayer = {};
-  allPlayers.forEach(name => {
+  REDS_PLAYERS.forEach(name => {
     const lastName = name.split(" ").pop().toLowerCase();
     const playerArticles = propArticles.filter(a =>
       a.player?.toLowerCase().includes(lastName) ||
@@ -44,13 +42,7 @@ export default function PlayerPropsPage() {
     byPlayer[name] = { articles: playerArticles, hits, total };
   });
 
-  // Sort: players with results first (by total desc), then alphabetical
-  const sortedPlayers = allPlayers.sort((a, b) => {
-    const aTotal = byPlayer[a]?.total ?? 0;
-    const bTotal = byPlayer[b]?.total ?? 0;
-    if (bTotal !== aTotal) return bTotal - aTotal;
-    return a.localeCompare(b);
-  });
+  const sortedPlayers = REDS_PLAYERS;
 
   return (
     <div style={{ padding: "1.5rem 2rem", maxWidth: "960px" }}>
