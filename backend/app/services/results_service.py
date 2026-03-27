@@ -138,6 +138,7 @@ async def resolve_game_predictions(game_date: str) -> dict:
                     "knicks_score":    reds_score,
                     "opp_score":       opp_score,
                     "resolved_at":     __import__("datetime").datetime.now(__import__("datetime").timezone.utc).isoformat(),
+                    "site_id":         "redshub",
                 }
                 try:
                     db.table("prediction_results").upsert(upsert_data, on_conflict="slug")

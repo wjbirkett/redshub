@@ -43,9 +43,17 @@ async def get_articles(limit: int = 20):
     db = get_supabase()
     if not db:
         return []
-    # Filter to Reds articles only
-    result = db.table("articles").select("*").or_("home_team.ilike.%Reds%,away_team.ilike.%Reds%,home_team.ilike.%Cincinnati%,away_team.ilike.%Cincinnati%").order("game_date", desc=True).limit(limit).execute()
-    return result.data or []
+    # Filter by site_id first; fall back to team-name heuristic for legacy rows
+    try:
+        result = db.table("articles").select("*").eq("site_id", "redshub").order("game_date", desc=True).limit(limit).execute()
+        rows = result.data or []
+    except Exception:
+        rows = []
+    if not rows:
+        # Legacy fallback: rows without site_id, filtered by team name
+        result = db.table("articles").select("*").or_("home_team.ilike.%Reds%,away_team.ilike.%Reds%,home_team.ilike.%Cincinnati%,away_team.ilike.%Cincinnati%").order("game_date", desc=True).limit(limit).execute()
+        rows = [r for r in (result.data or []) if not r.get("site_id") or r.get("site_id") == "redshub"]
+    return rows
 
 
 async def get_article_by_slug(slug: str):
@@ -53,13 +61,24 @@ async def get_article_by_slug(slug: str):
     if not db:
         return None
     result = db.table("articles").select("*").eq("slug", slug).single().execute()
-    return result.data
+    row = result.data
+    if not row:
+        return None
+    site = row.get("site_id")
+    if site == "knickshub":
+        # Block cross-site leakage
+        return None
+    if site == "redshub" or site is None:
+        # Allow redshub rows and legacy rows with no site_id
+        return row
+    return None
 
 
 async def save_article(article: dict) -> dict:
     db = get_supabase()
     if not db:
         return article
+    article["site_id"] = "redshub"
     result = db.table("articles").upsert(article, on_conflict="slug")
     return result.data[0] if result.data else article
 

@@ -1,9 +1,21 @@
-import asyncio, threading
-from fastapi import APIRouter, HTTPException, BackgroundTasks, Request
+import asyncio, threading, os
+from fastapi import APIRouter, HTTPException, BackgroundTasks, Request, Depends, Header
 from fastapi.responses import Response
 from slowapi import Limiter
 from slowapi.util import get_remote_address
 from datetime import date, timedelta
+
+ADMIN_KEY = os.environ.get("ADMIN_API_KEY", "")
+IS_PRODUCTION = os.environ.get("RAILWAY_ENVIRONMENT", "") == "production" or os.environ.get("ENVIRONMENT", "") == "production"
+
+
+async def verify_admin(x_admin_key: str = Header(None)):
+    if not ADMIN_KEY:
+        if IS_PRODUCTION:
+            raise HTTPException(status_code=403, detail="Admin key not configured")
+        return
+    if x_admin_key != ADMIN_KEY:
+        raise HTTPException(status_code=403, detail="Unauthorized")
 
 from app.services.article_service import (
     generate_game_preview, save_article, get_articles, get_article_by_slug, slugify,
@@ -78,14 +90,17 @@ async def get_results():
     if not db:
         return {"predictions": [], "props": []}
     try:
-        pred = db.table("prediction_results").select("*").order("game_date", desc=True).execute()
-        # Filter to Reds games client-side (or_() with ilike is unreliable)
-        # Filter: check opponent, home_team, away_team, and slug for Reds indicators
-        pred_reds = [p for p in (pred.data or []) if
-            "reds" in (p.get("home_team", "") + p.get("away_team", "") + p.get("opponent", "") + p.get("slug", "")).lower()
-            or "cincinnati" in (p.get("home_team", "") + p.get("away_team", "") + p.get("opponent", "")).lower()
-            or any(kw in p.get("slug", "").lower() for kw in ["reds", "cincinnati"])
-        ]
+        pred = db.table("prediction_results").select("*").eq("site_id", "redshub").order("game_date", desc=True).execute()
+        pred_reds = pred.data or []
+        if not pred_reds:
+            # Legacy fallback: rows without site_id, filtered by team/slug heuristic
+            pred_all = db.table("prediction_results").select("*").order("game_date", desc=True).execute()
+            pred_reds = [p for p in (pred_all.data or []) if
+                not p.get("site_id") and (
+                    "reds" in (p.get("home_team", "") + p.get("away_team", "") + p.get("opponent", "") + p.get("slug", "")).lower()
+                    or "cincinnati" in (p.get("home_team", "") + p.get("away_team", "") + p.get("opponent", "")).lower()
+                )
+            ]
         # Dedup by game_date (best_bet + prediction create separate rows for same game)
         seen = set()
         pred_data = []
@@ -96,15 +111,18 @@ async def get_results():
     except Exception:
         pred_data = []
     try:
-        props = db.table("prop_results").select("*").order("game_date", desc=True).execute()
-        # Filter to Reds players only (shared DB has Knicks props too)
-        reds_players = {
-            "Elly De La Cruz", "TJ Friedl", "Spencer Steer", "Tyler Stephenson",
-            "Jonathan India", "Jake Fraley", "Jeimer Candelario", "Stuart Fairchild",
-            "Santiago Espinal", "Hunter Greene", "Nick Lodolo", "Andrew Abbott",
-            "Graham Ashcraft", "Frankie Montas",
-        }
-        props_data = [p for p in (props.data or []) if p.get("player") in reds_players]
+        props = db.table("prop_results").select("*").eq("site_id", "redshub").order("game_date", desc=True).execute()
+        props_data = props.data or []
+        if not props_data:
+            # Legacy fallback: filter by known Reds player list
+            reds_players = {
+                "Elly De La Cruz", "TJ Friedl", "Spencer Steer", "Tyler Stephenson",
+                "Jonathan India", "Jake Fraley", "Jeimer Candelario", "Stuart Fairchild",
+                "Santiago Espinal", "Hunter Greene", "Nick Lodolo", "Andrew Abbott",
+                "Graham Ashcraft", "Frankie Montas",
+            }
+            props_all = db.table("prop_results").select("*").order("game_date", desc=True).execute()
+            props_data = [p for p in (props_all.data or []) if not p.get("site_id") and p.get("player") in reds_players]
     except Exception:
         props_data = []
     return {"predictions": pred_data, "props": props_data}
@@ -139,25 +157,33 @@ async def backtest():
     db = get_supabase()
     if not db:
         return {"error": "No DB"}
-    # Filter for Reds games only
-    pred = db.table("prediction_results").select("*").execute()
-    props = db.table("prop_results").select("*").execute()
-
-    # Filter to Reds + dedup by game_date
-    reds_all = [p for p in (pred.data or []) if
-        "reds" in (p.get("home_team", "") + p.get("away_team", "") + p.get("opponent", "") + p.get("slug", "")).lower()
-        or "cincinnati" in (p.get("home_team", "") + p.get("away_team", "") + p.get("opponent", "")).lower()
-    ]
+    # Filter for Reds games only — prefer site_id, fall back to heuristic for legacy rows
+    pred = db.table("prediction_results").select("*").eq("site_id", "redshub").execute()
+    reds_all = pred.data or []
+    if not reds_all:
+        pred_legacy = db.table("prediction_results").select("*").execute()
+        reds_all = [p for p in (pred_legacy.data or []) if
+            not p.get("site_id") and (
+                "reds" in (p.get("home_team", "") + p.get("away_team", "") + p.get("opponent", "") + p.get("slug", "")).lower()
+                or "cincinnati" in (p.get("home_team", "") + p.get("away_team", "") + p.get("opponent", "")).lower()
+            )
+        ]
     seen = set()
     reds_preds = []
     for p in reds_all:
         if p.get("game_date") not in seen:
             seen.add(p.get("game_date"))
             reds_preds.append(p)
-    reds_props = [p for p in (props.data or []) if p.get("player", "") in [
-        "Elly De La Cruz", "TJ Friedl", "Spencer Steer", "Tyler Stephenson",
-        "Jonathan India", "Jake Fraley", "Jeimer Candelario"
-    ]]
+
+    props = db.table("prop_results").select("*").eq("site_id", "redshub").execute()
+    reds_props = props.data or []
+    if not reds_props:
+        reds_player_set = {
+            "Elly De La Cruz", "TJ Friedl", "Spencer Steer", "Tyler Stephenson",
+            "Jonathan India", "Jake Fraley", "Jeimer Candelario",
+        }
+        props_legacy = db.table("prop_results").select("*").execute()
+        reds_props = [p for p in (props_legacy.data or []) if not p.get("site_id") and p.get("player", "") in reds_player_set]
 
     # Simple ROI calc
     win_payout = 100 / 110  # -110 odds
@@ -180,7 +206,9 @@ async def backtest():
     return {
         "total_bets": total_bets,
         "total_profit_units": round(total_profit, 2),
+        "total_pl": round(total_profit, 2),   # frontend alias
         "roi_pct": round(roi, 1),
+        "roi": round(roi, 1),                  # frontend alias
         "predictions": len(reds_preds),
         "props": len(reds_props),
     }
@@ -197,7 +225,7 @@ async def get_article(slug: str):
 # ── Generate endpoints ────────────────────────────────────────────────────────
 
 @router.post("/trigger-all")
-async def trigger_all_articles():
+async def trigger_all_articles(_: None = Depends(verify_admin)):
     from app.scheduler import _run_async
 
     async def _gen():
@@ -236,7 +264,7 @@ async def trigger_all_articles():
 
 
 @router.post("/generate/next-game")
-async def generate_next_game_article(force: bool = False):
+async def generate_next_game_article(force: bool = False, _: None = Depends(verify_admin)):
     games_raw = await fetch_schedule()
     games     = [to_dict(g) for g in games_raw]
     game      = _next_game(games)
@@ -264,7 +292,7 @@ async def generate_next_game_article(force: bool = False):
 
 
 @router.post("/generate/for-date")
-async def generate_for_date(game_date: str, force: bool = True):
+async def generate_for_date(game_date: str, force: bool = True, _: None = Depends(verify_admin)):
     target   = date.fromisoformat(game_date)
     games_raw = await fetch_schedule()
     games    = [to_dict(g) for g in games_raw]
@@ -317,7 +345,7 @@ async def generate_for_date(game_date: str, force: bool = True):
 
 
 @router.post("/generate/history")
-async def generate_history(force: bool = False):
+async def generate_history(force: bool = False, _: None = Depends(verify_admin)):
     from datetime import datetime as dt
     today_str = str(date.today())
     d         = dt.strptime(today_str, "%Y-%m-%d")
@@ -332,7 +360,7 @@ async def generate_history(force: bool = False):
 
 
 @router.post("/generate/postgame")
-async def generate_postgame(game_date: str = None):
+async def generate_postgame(game_date: str = None, _: None = Depends(verify_admin)):
     """Force-generate postgame analysis for a specific date or today."""
     import traceback
     if not game_date:
@@ -348,7 +376,7 @@ async def generate_postgame(game_date: str = None):
 
 
 @router.post("/resolve-results")
-async def resolve_results(game_date: str = None):
+async def resolve_results(game_date: str = None, _: None = Depends(verify_admin)):
     from app.services.results_service import resolve_game_predictions
     import traceback
     if not game_date:
@@ -377,7 +405,7 @@ async def debug_trigger():
 
 
 @router.patch("/{slug}")
-async def update_article(slug: str, request: Request):
+async def update_article(slug: str, request: Request, _: None = Depends(verify_admin)):
     from app.db import get_supabase
     data = await request.json()
     db   = get_supabase()
@@ -387,7 +415,7 @@ async def update_article(slug: str, request: Request):
 
 
 @router.delete("/{slug}")
-async def delete_article(slug: str):
+async def delete_article(slug: str, _: None = Depends(verify_admin)):
     from app.db import get_supabase
     db = get_supabase()
     db.table("articles").delete().eq("slug", slug).execute()

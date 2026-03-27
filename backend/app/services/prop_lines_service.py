@@ -4,6 +4,7 @@ prop_lines_service.py — Fetches real sportsbook player prop lines for MLB.
 Primary: The Odds API (real DraftKings/FanDuel lines)
 Fallback: Dynamic lines calculated from MLB season averages
 """
+import os
 import logging
 import math
 import httpx
@@ -12,7 +13,7 @@ from typing import Dict, List, Optional
 
 logger = logging.getLogger(__name__)
 
-ODDS_API_KEY = "ea936af7908166c106f76b3f68a87d4f"
+ODDS_API_KEY = os.environ.get("ODDS_API_KEY", "")
 ODDS_API_BASE = "https://api.the-odds-api.com/v4"
 SPORT = "baseball_mlb"
 

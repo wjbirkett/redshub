@@ -113,9 +113,18 @@ def generate_article(force: bool = False):
 
             gd   = str(today)
             slug = slugify(f"{next_game['away_team']}-vs-{next_game['home_team']}-prediction-{gd}")
-            if await get_article_by_slug(slug) and not force:
-                logger.info(f"Cron: articles already exist for {gd}")
-                return
+            # Check by slug AND by site_id+game_date to prevent duplicate generation
+            if not force:
+                from app.db import get_supabase as _get_db
+                _db = _get_db()
+                if _db:
+                    _ex = _db.table("articles").select("slug").eq("site_id", "redshub").eq("game_date", gd).eq("article_type", "prediction").execute()
+                    if _ex.data:
+                        logger.info(f"Cron: prediction article already exists for {gd} (site_id check)")
+                        return
+                elif await get_article_by_slug(slug):
+                    logger.info(f"Cron: articles already exist for {gd}")
+                    return
 
             injuries = [i.model_dump() if hasattr(i, "model_dump") else i for i in await fetch_injury_report()]
             top_st   = [s.model_dump() if hasattr(s, "model_dump") else s for s in (await fetch_player_stats())[:8]]
@@ -136,7 +145,11 @@ def generate_article(force: bool = False):
                 if ou      is not None: over_under = f"{ou}"
 
             art  = await generate_game_preview(next_game["home_team"], next_game["away_team"], gd, spread, moneyline, over_under, injuries, games, top_st)
-            await save_article(art)
+            # Double-check before saving to guard against race conditions
+            if not force and await get_article_by_slug(art.get("slug", slug)):
+                logger.info(f"Cron: article {art.get('slug')} appeared during generation — skipping save")
+            else:
+                await save_article(art)
             picks = art.get("key_picks") or {}
             bb    = await generate_best_bet(next_game["home_team"], next_game["away_team"], gd, spread, moneyline, over_under, injuries, top_st, forced_total_lean=picks.get("total_lean"), forced_total_pick=picks.get("total_pick"))
             await save_article(bb)

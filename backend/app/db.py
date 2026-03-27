@@ -107,6 +107,9 @@ class SupabaseTable:
 
     def upsert(self, data: dict, on_conflict: str = None):
         headers = {**self.headers, "Prefer": "resolution=merge-duplicates,return=representation"}
-        r = httpx.post(f"{self.url}/rest/v1/{self.table_name}", headers=headers, json=data)
+        url = f"{self.url}/rest/v1/{self.table_name}"
+        if on_conflict:
+            url += f"?on_conflict={on_conflict}"
+        r = httpx.post(url, headers=headers, json=data)
         r.raise_for_status()
         return type("Result", (), {"data": r.json()})()
