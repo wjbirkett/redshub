@@ -262,8 +262,12 @@ async def resolve_game_predictions(game_date: str) -> dict:
         pick_str   = picks.get("pick") or picks.get("prop_line") or picks.get(f"{prop_type}_pick") or picks.get("line") or ""
         lean       = (picks.get("lean") or picks.get("prop_lean") or picks.get(f"{prop_type}_lean") or "").upper()
         line       = None
+        import re as _re
         try:
-            line = float(str(pick_str).replace("Over", "").replace("Under", "").strip())
+            # Extract first number from strings like "Over 1.5 Total Bases"
+            num_match = _re.search(r"[\d.]+", str(pick_str))
+            if num_match:
+                line = float(num_match.group())
         except (ValueError, AttributeError):
             pass
 
