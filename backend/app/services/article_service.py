@@ -504,6 +504,9 @@ async def generate_daily_props(
             "strikeouts": k / max(float(player_stat.get("games_started", gp) or gp), 1),
         }
 
+        STRONG_EDGE = 8  # Full article
+        LEAN_EDGE = 5    # Quick pick card
+
         for prop_type, line in props.items():
             projected = stat_map.get(prop_type, 0)
             if projected == 0 or line == 0:
@@ -511,7 +514,7 @@ async def generate_daily_props(
             edge_pct = abs(projected - line) / line * 100
             direction = "OVER" if projected > line else "UNDER"
 
-            if edge_pct >= 8:
+            if edge_pct >= LEAN_EDGE:  # Changed from 8 to 5
                 prop_edges.append({
                     "player": player,
                     "prop_type": prop_type,
@@ -519,19 +522,23 @@ async def generate_daily_props(
                     "projected": round(projected, 2),
                     "edge_pct": round(edge_pct, 1),
                     "direction": direction,
+                    "tier": "STRONG" if edge_pct >= STRONG_EDGE else "LEAN",
                     "player_stat": player_stat,
                 })
 
-    # Sort by edge, take top N
+    # Sort by edge
     prop_edges.sort(key=lambda x: -x["edge_pct"])
-    best_props = prop_edges[:max_props]
+
+    strong_props = [p for p in prop_edges if p.get("tier") == "STRONG"]
+    lean_props = [p for p in prop_edges if p.get("tier") == "LEAN"][:3]
+    best_props = strong_props + lean_props
 
     if best_props:
-        logger.info(f"Found {len(prop_edges)} props with edge, publishing top {len(best_props)}")
+        logger.info(f"Found {len(prop_edges)} props with edge ({len(strong_props)} STRONG, {len(lean_props)} LEAN), publishing {len(best_props)}")
         for p in best_props:
-            logger.info(f"  {p['player']} {p['prop_type']}: line={p['line']}, proj={p['projected']}, edge={p['edge_pct']}%")
+            logger.info(f"  [{p['tier']}] {p['player']} {p['prop_type']}: line={p['line']}, proj={p['projected']}, edge={p['edge_pct']}%")
     else:
-        logger.info("No props with 8%+ edge — falling back to top 3 players")
+        logger.info("No props with 5%+ edge — falling back to top 3 players")
 
     # Generate articles for best edge props, or fallback
     if best_props:
@@ -543,6 +550,8 @@ async def generate_daily_props(
                     injuries=injuries, top_stats=top_stats, over_under=over_under,
                 )
                 art["edge_pct"] = prop["edge_pct"]
+                if prop.get("tier") == "LEAN":
+                    art["article_type"] = "lean_prop"
                 articles.append(art)
             except Exception as e:
                 logger.error(f"Prop generation failed for {prop['player']}: {e}")
