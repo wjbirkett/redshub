@@ -299,4 +299,14 @@ async def resolve_game_predictions(game_date: str) -> dict:
         except Exception as e:
             logger.error(f"prop_results upsert failed for {article.get('slug')}: {e}")
 
-    return {"status": "resolved", "game_date": game_date, "resolved": resolved, "props_resolved": props_resolved}
+    return {
+        "status": "resolved", "game_date": game_date,
+        "resolved": resolved, "props_resolved": props_resolved,
+        "debug": {
+            "game_result": result,
+            "articles_found": len(articles.data),
+            "article_types": [a.get("article_type") for a in articles.data],
+            "article_slugs": [a.get("slug") for a in articles.data],
+            "picks_types": [type(a.get("key_picks")).__name__ for a in articles.data],
+        }
+    }
