@@ -1,6 +1,6 @@
 import { useQuery } from "@tanstack/react-query";
 import { Helmet } from "react-helmet-async";
-import { getResults } from "../utils/api";
+import { getResults, getBacktest } from "../utils/api";
 
 const S = {
   surface: "#1a1a1a", surfaceHigh: "#242424",
@@ -27,6 +27,7 @@ function StatBox({ hits, total, label }) {
 
 export default function BettingRecordPage() {
   const { data, isLoading } = useQuery({ queryKey: ["results"], queryFn: getResults });
+  const { data: backtest }  = useQuery({ queryKey: ["backtest"], queryFn: getBacktest });
 
   const preds   = data?.predictions ?? [];
   const propRes = data?.props ?? [];
@@ -54,6 +55,33 @@ export default function BettingRecordPage() {
         <StatBox hits={ouHits}  total={ouTotal}        label="Over/Under" />
         <StatBox hits={phHits}  total={propRes.length} label="Player Props" />
       </div>
+
+      {/* Backtest ROI card */}
+      {backtest && (
+        <div style={{ background: S.surface, borderRadius: "0.75rem", padding: "1.25rem 1.5rem", border: `1px solid ${S.border}`, marginBottom: "2rem", display: "flex", gap: "2rem", flexWrap: "wrap", alignItems: "center" }}>
+          <span style={{ fontSize: "0.5625rem", fontWeight: 900, textTransform: "uppercase", letterSpacing: "0.15em", color: S.textMuted }}>Backtest (Season)</span>
+          <div style={{ display: "flex", gap: "2rem", flexWrap: "wrap" }}>
+            <div style={{ textAlign: "center" }}>
+              <span style={{ display: "block", fontSize: "0.5625rem", fontWeight: 900, textTransform: "uppercase", letterSpacing: "0.1em", color: S.textMuted, marginBottom: "0.25rem" }}>Total P/L</span>
+              <span style={{ fontFamily: "Space Grotesk, sans-serif", fontWeight: 900, fontSize: "1.5rem", color: (backtest.total_pl ?? 0) >= 0 ? S.green : S.missRed }}>
+                {(backtest.total_pl ?? 0) >= 0 ? "+" : ""}{(backtest.total_pl ?? 0).toFixed(2)}u
+              </span>
+            </div>
+            <div style={{ textAlign: "center" }}>
+              <span style={{ display: "block", fontSize: "0.5625rem", fontWeight: 900, textTransform: "uppercase", letterSpacing: "0.1em", color: S.textMuted, marginBottom: "0.25rem" }}>ROI</span>
+              <span style={{ fontFamily: "Space Grotesk, sans-serif", fontWeight: 900, fontSize: "1.5rem", color: (backtest.roi ?? 0) >= 0 ? S.green : S.missRed }}>
+                {(backtest.roi ?? 0) >= 0 ? "+" : ""}{(backtest.roi ?? 0).toFixed(1)}%
+              </span>
+            </div>
+            <div style={{ textAlign: "center" }}>
+              <span style={{ display: "block", fontSize: "0.5625rem", fontWeight: 900, textTransform: "uppercase", letterSpacing: "0.1em", color: S.textMuted, marginBottom: "0.25rem" }}>Total Bets</span>
+              <span style={{ fontFamily: "Space Grotesk, sans-serif", fontWeight: 900, fontSize: "1.5rem", color: S.text }}>
+                {backtest.total_bets ?? 0}
+              </span>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Game-by-game log */}
       {preds.length > 0 && (

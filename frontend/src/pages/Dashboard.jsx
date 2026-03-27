@@ -67,7 +67,7 @@ export default function Dashboard() {
     || articles?.find((a) => a.article_type === "best_bet")
     || articles?.find((a) => a.article_type === "prediction");
   const latestPredictions = articles?.filter((a) =>
-    ["prediction", "best_bet", "prop", "postgame"].includes(a.article_type)
+    ["prediction", "best_bet", "prop", "postgame", "lean_prop"].includes(a.article_type)
   ).slice(0, 3);
 
   const nextGame = schedule?.find((g) => !g.home_score && g.status !== "Final");

@@ -19,6 +19,7 @@ export const getTweets     = ()       => api.get("/api/tweets/").then(r => r.dat
 export const getBirthdays  = ()       => api.get("/api/birthdays/upcoming").then(r => r.data);
 export const getArticles   = (limit = 20) => api.get("/api/articles/", { params: { limit } }).then(r => r.data);
 export const getResults    = ()       => fetch(`${BASE_URL}/api/articles/results`).then(r => r.json());
+export const getBacktest   = ()       => fetch(`${BASE_URL}/api/articles/backtest`).then(r => r.json());
 export const getArticle    = (slug)   => api.get(`/api/articles/${slug}`).then(r => r.data);
 export const generateNextGameArticle = () => api.post("/api/articles/generate/next-game").then(r => r.data);
 export const getOdds       = ()       => api.get("/api/articles/odds").then(r => r.data);

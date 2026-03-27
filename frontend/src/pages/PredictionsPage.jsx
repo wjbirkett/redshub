@@ -13,6 +13,7 @@ const BADGE = {
   prediction: { bg: "#00508a", color: "#dbe9ff", label: "PREDICTION" },
   best_bet:   { bg: "#06bb55", color: "#00431a", label: "BEST BET" },
   prop:       { bg: "#93000a", color: "#ffdad6", label: "PROP BET" },
+  lean_prop:  { bg: "#93000a", color: "#ffdad6", label: "LEAN PICK" },
   history:    { bg: "#4a1d96", color: "#d8b4fe", label: "HISTORY" },
   postgame:   { bg: "#1a1a1a", color: "#c9b8ae", label: "POSTGAME" },
 };
@@ -22,6 +23,7 @@ const FILTERS = [
   { id: "best_bet",  label: "Best Bets" },
   { id: "prediction",label: "Predictions" },
   { id: "prop",      label: "Props" },
+  { id: "lean_prop", label: "Lean Picks" },
   { id: "postgame",  label: "Postgame" },
   { id: "history",   label: "History" },
 ];
