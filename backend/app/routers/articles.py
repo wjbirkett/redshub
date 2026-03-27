@@ -80,7 +80,12 @@ async def get_results():
     try:
         pred = db.table("prediction_results").select("*").order("game_date", desc=True).execute()
         # Filter to Reds games client-side (or_() with ilike is unreliable)
-        pred_data = [p for p in (pred.data or []) if "reds" in (p.get("home_team", "") + p.get("away_team", "")).lower() or "cincinnati" in (p.get("home_team", "") + p.get("away_team", "")).lower()]
+        # Filter: check opponent, home_team, away_team, and slug for Reds indicators
+        pred_data = [p for p in (pred.data or []) if
+            "reds" in (p.get("home_team", "") + p.get("away_team", "") + p.get("opponent", "") + p.get("slug", "")).lower()
+            or "cincinnati" in (p.get("home_team", "") + p.get("away_team", "") + p.get("opponent", "")).lower()
+            or any(kw in p.get("slug", "").lower() for kw in ["reds", "cincinnati"])
+        ]
     except Exception:
         pred_data = []
     try:
