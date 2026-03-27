@@ -68,8 +68,13 @@ async def get_article_by_slug(slug: str):
     if site == "knickshub":
         # Block cross-site leakage
         return None
-    if site == "redshub" or site is None:
-        # Allow redshub rows and legacy rows with no site_id
+    if site is None:
+        # Legacy row with no site_id — apply Reds heuristic to block KnicksHub articles
+        teams = (row.get("home_team", "") + row.get("away_team", "")).lower()
+        if "knicks" in teams or "new york" in teams:
+            return None  # This is a KnicksHub article
+        return row
+    if site == "redshub":
         return row
     return None
 

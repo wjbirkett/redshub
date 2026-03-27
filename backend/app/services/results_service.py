@@ -1,6 +1,6 @@
 import logging
 import httpx
-from datetime import date
+from datetime import date, datetime, timezone
 from app.db import get_supabase
 
 logger = logging.getLogger(__name__)
@@ -135,9 +135,9 @@ async def resolve_game_predictions(game_date: str) -> dict:
                     "moneyline_pick":  picks.get("moneyline_pick"),
                     "moneyline_lean":  picks.get("moneyline_lean"),
                     "moneyline_result": ml_result,
-                    "knicks_score":    reds_score,
+                    "knicks_score":    reds_score,  # Field named after KnicksHub (shared DB schema) — stores Reds score
                     "opp_score":       opp_score,
-                    "resolved_at":     __import__("datetime").datetime.now(__import__("datetime").timezone.utc).isoformat(),
+                    "resolved_at":     datetime.now(timezone.utc).isoformat(),
                     "site_id":         "redshub",
                 }
                 try:
@@ -153,4 +153,104 @@ async def resolve_game_predictions(game_date: str) -> dict:
                     except Exception as e2:
                         logger.error(f"Results upsert failed: {e2}")
 
-    return {"status": "resolved", "game_date": game_date, "resolved": resolved}
+    # ── Prop grading ──────────────────────────────────────────────────────────
+    # MLB stat label mapping from ESPN box score to prop_type keys
+    MLB_STAT_MAP = {
+        "hits":          "H",
+        "total_bases":   "TB",
+        "home_runs":     "HR",
+        "rbi":           "RBI",
+        "strikeouts":    "K",   # pitcher strikeouts
+        "stolen_bases":  "SB",
+    }
+    # Human-readable prop_type aliases coming from key_picks
+    PROP_TYPE_ALIASES = {
+        "total bases": "total_bases",
+        "hits":        "hits",
+        "home runs":   "home_runs",
+        "home run":    "home_runs",
+        "rbi":         "rbi",
+        "rbis":        "rbi",
+        "strikeouts":  "strikeouts",
+        "stolen bases": "stolen_bases",
+        "stolen base":  "stolen_bases",
+    }
+
+    # Fetch the game_id needed for box score lookups
+    game_id = None
+    ds = game_date.replace("-", "")
+    try:
+        async with httpx.AsyncClient(timeout=15) as client:
+            r2 = await client.get(f"{ESPN_SCOREBOARD}?dates={ds}")
+            d2 = r2.json()
+        for event in d2.get("events", []):
+            comp2       = event.get("competitions", [{}])[0]
+            competitors = comp2.get("competitors", [])
+            ids         = [c.get("team", {}).get("id") for c in competitors]
+            if REDS_ESPN_ID in ids:
+                game_id = event.get("id")
+                break
+    except Exception as e:
+        logger.warning(f"Could not fetch game_id for prop grading: {e}")
+
+    props_resolved = 0
+    for article in articles.data:
+        if article.get("article_type") != "prop":
+            continue
+
+        picks      = article.get("key_picks") or {}
+        if not isinstance(picks, dict):
+            picks = {}
+
+        player     = article.get("player") or picks.get("player")
+        if not player:
+            logger.warning(f"Prop article {article.get('slug')} has no player — saving as pending")
+        raw_type   = (article.get("prop_type") or picks.get("prop_type") or picks.get("best_prop_type") or "").lower()
+        prop_type  = PROP_TYPE_ALIASES.get(raw_type, raw_type) or "hits"
+
+        # Resolve the line
+        pick_str   = picks.get("pick") or picks.get(f"{prop_type}_pick") or picks.get("line") or ""
+        lean       = (picks.get("lean") or picks.get(f"{prop_type}_lean") or "").upper()
+        line       = None
+        try:
+            line = float(str(pick_str).replace("Over", "").replace("Under", "").strip())
+        except (ValueError, AttributeError):
+            pass
+
+        # Attempt to fetch actual stat from box score
+        actual_value = None
+        if game_id and player:
+            player_stats = await fetch_player_stats_from_boxscore(game_id, player)
+            if player_stats:
+                stat_label = MLB_STAT_MAP.get(prop_type)
+                if stat_label and stat_label in player_stats:
+                    try:
+                        actual_value = float(str(player_stats[stat_label]).split("-")[0])
+                    except (ValueError, TypeError):
+                        actual_value = None
+
+        # Grade if we have everything; otherwise save as pending
+        if actual_value is not None and line is not None and lean in ("OVER", "UNDER"):
+            result_str = "HIT" if (lean == "OVER" and actual_value > line) or (lean == "UNDER" and actual_value < line) else "MISS"
+        else:
+            result_str = None  # pending
+
+        prop_row = {
+            "slug":         article["slug"],
+            "game_date":    game_date,
+            "player":       player or "",
+            "prop_type":    prop_type,
+            "line":         line,
+            "lean":         lean or None,
+            "actual_value": actual_value,
+            "result":       result_str,
+            "resolved_at":  datetime.now(timezone.utc).isoformat(),
+            "site_id":      "redshub",
+        }
+        try:
+            db.table("prop_results").upsert(prop_row, on_conflict="slug")
+            props_resolved += 1
+        except Exception as e:
+            logger.error(f"prop_results upsert failed for {article.get('slug')}: {e}")
+
+    return {"status": "resolved", "game_date": game_date, "resolved": resolved, "props_resolved": props_resolved}
