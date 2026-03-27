@@ -321,6 +321,63 @@ async def fetch_roster() -> list:
     return roster
 
 
+async def fetch_full_roster() -> list:
+    """Fetch full Reds roster from ESPN, grouped by position category with headshots."""
+    url = f"{ESPN_BASE}/teams/{REDS_ESPN_ID}/roster"
+    try:
+        async with httpx.AsyncClient(timeout=15) as client:
+            resp = await client.get(url)
+            resp.raise_for_status()
+            data = resp.json()
+    except Exception as e:
+        logger.error(f"ESPN full roster fetch failed: {e}")
+        return []
+
+    groups = []
+    for group in data.get("athletes", []):
+        if isinstance(group, dict) and "items" in group:
+            # Grouped format: { position: "Pitchers", items: [...] }
+            position_label = group.get("position", "Other")
+            players = []
+            for a in group.get("items", []):
+                players.append(_parse_roster_player(a))
+            groups.append({"position_group": position_label, "players": players})
+        elif isinstance(group, dict) and "displayName" in group:
+            # Flat format (fallback): each entry is a player
+            return [{"position_group": "Roster", "players": [_parse_roster_player(a) for a in data.get("athletes", [])]}]
+
+    # If we got coach info, attach manager name
+    coach = data.get("coach", [])
+    manager = coach[0].get("firstName", "") + " " + coach[0].get("lastName", "") if coach else None
+
+    return {"groups": groups, "manager": manager, "season": data.get("season", {}).get("year")}
+
+
+def _parse_roster_player(a: dict) -> dict:
+    headshot = a.get("headshot", {}).get("href", "")
+    if not headshot:
+        pid = a.get("id", "")
+        headshot = f"https://a.espncdn.com/i/headshots/mlb/players/full/{pid}.png"
+    return {
+        "id": a.get("id", ""),
+        "name": a.get("displayName", a.get("fullName", "")),
+        "jersey": a.get("jersey", ""),
+        "position": a.get("position", {}).get("abbreviation", ""),
+        "position_name": a.get("position", {}).get("name", ""),
+        "headshot": headshot,
+        "height": a.get("displayHeight", ""),
+        "weight": a.get("displayWeight", ""),
+        "age": a.get("age"),
+        "bats": a.get("bats", {}).get("abbreviation", ""),
+        "throws": a.get("throws", {}).get("abbreviation", ""),
+        "birth_place": a.get("birthPlace", {}).get("city", ""),
+        "birth_state": a.get("birthPlace", {}).get("state", ""),
+        "college": a.get("college", {}).get("name", "") if isinstance(a.get("college"), dict) else "",
+        "experience": a.get("experience", {}).get("years", 0) if isinstance(a.get("experience"), dict) else 0,
+        "debut_year": a.get("debutYear"),
+    }
+
+
 async def fetch_recent_games(last_n: int = 5) -> List[Game]:
     games    = await fetch_schedule()
     finished = [g for g in games if g.status == "Final"]
