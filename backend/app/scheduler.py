@@ -267,6 +267,11 @@ async def _postgame_check():
         logger.error(f"Postgame generation failed: {e}", exc_info=True)
 
 
+def run_self_improvement():
+    from app.services.self_improve import run_self_improvement as rsi
+    _run_async(rsi())
+
+
 def start_scheduler():
     _scheduler.add_job(refresh_news,              CronTrigger(minute="*/15"))
     _scheduler.add_job(refresh_injuries,          CronTrigger(hour="*/3"))
@@ -277,6 +282,8 @@ def start_scheduler():
     # Resolve results at 4am UTC (midnight ET)
     _scheduler.add_job(resolve_results,           CronTrigger(hour=4,  minute=0, timezone="UTC"))
     _scheduler.add_job(generate_postgame_article, CronTrigger(minute="*/15"))
+    # Self-improvement: Sundays at 8am UTC
+    _scheduler.add_job(run_self_improvement,      CronTrigger(day_of_week="sun", hour=8, minute=0, timezone="UTC"))
     _scheduler.start()
     logger.info("RedsHub scheduler started")
 
