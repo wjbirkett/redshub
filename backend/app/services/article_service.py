@@ -263,12 +263,18 @@ async def generate_best_bet(
     spread: str, moneyline: str, over_under: str,
     injuries: list, top_stats: list,
     forced_total_lean: str = None, forced_total_pick: str = None,
+    forced_spread_lean: str = None, forced_spread_pick: str = None,
+    forced_moneyline_lean: str = None,
 ) -> dict:
     is_home  = "Reds" in home_team or "Cincinnati" in home_team
     opp_name = away_team if is_home else home_team
     force_note = ""
     if forced_total_lean:
-        force_note = f"\nIMPORTANT: The total lean MUST be {forced_total_lean} (consistent with prediction article)."
+        force_note += f"\nIMPORTANT: The total lean MUST be {forced_total_lean} (consistent with prediction article)."
+    if forced_spread_lean:
+        force_note += f"\nIMPORTANT: The spread lean MUST be {forced_spread_lean} {forced_spread_pick or ''} (consistent with prediction article)."
+    if forced_moneyline_lean:
+        force_note += f"\nIMPORTANT: The moneyline lean MUST be {forced_moneyline_lean} (consistent with prediction article)."
 
     # Composite scoring
     try:

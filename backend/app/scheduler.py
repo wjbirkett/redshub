@@ -151,7 +151,7 @@ def generate_article(force: bool = False):
             else:
                 await save_article(art)
             picks = art.get("key_picks") or {}
-            bb    = await generate_best_bet(next_game["home_team"], next_game["away_team"], gd, spread, moneyline, over_under, injuries, top_st, forced_total_lean=picks.get("total_lean"), forced_total_pick=picks.get("total_pick"))
+            bb    = await generate_best_bet(next_game["home_team"], next_game["away_team"], gd, spread, moneyline, over_under, injuries, top_st, forced_total_lean=picks.get("total_lean"), forced_total_pick=picks.get("total_pick"), forced_spread_lean=picks.get("spread_lean"), forced_spread_pick=picks.get("spread_pick"), forced_moneyline_lean=picks.get("moneyline_lean"))
             await save_article(bb)
 
             active = [p for p in PROP_PLAYERS if not any(p.split()[-1].lower() in i.get("player_name","").lower() and "out" in i.get("status","").lower() for i in injuries)]
