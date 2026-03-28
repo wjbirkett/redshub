@@ -282,8 +282,8 @@ def start_scheduler():
     # Resolve results at 4am UTC (midnight ET)
     _scheduler.add_job(resolve_results,           CronTrigger(hour=4,  minute=0, timezone="UTC"))
     _scheduler.add_job(generate_postgame_article, CronTrigger(minute="*/15"))
-    # Self-improvement: Sundays at 8am UTC
-    _scheduler.add_job(run_self_improvement,      CronTrigger(day_of_week="sun", hour=8, minute=0, timezone="UTC"))
+    # Self-improvement: daily at 5am UTC (1hr after results resolver)
+    _scheduler.add_job(run_self_improvement,      CronTrigger(hour=5, minute=0, timezone="UTC"))
     _scheduler.start()
     logger.info("RedsHub scheduler started")
 

@@ -1,8 +1,8 @@
 """
 Self-improving system for RedsHub (MLB/Reds).
-- Confidence calibration (are predictions accurate?)
-- Edge threshold optimization (what edge % actually profits?)
-- Weekly automated self-improvement analysis
+- Hit rate tracking per bet type (spread, total, moneyline, props)
+- ROI calculation at -110 juice
+- Daily automated self-improvement analysis
 """
 import logging
 import json
@@ -12,215 +12,240 @@ logger = logging.getLogger(__name__)
 
 SITE_ID = "redshub"
 
-# Confidence bins for calibration
-CONFIDENCE_BINS = [
-    (50, 55, "50-55%"),
-    (55, 60, "55-60%"),
-    (60, 65, "60-65%"),
-    (65, 70, "65-70%"),
-    (70, 100, "70%+"),
-]
-
-# Edge thresholds to test for optimization
-EDGE_THRESHOLDS = [3.0, 5.0, 8.0, 10.0, 12.0, 15.0]
-
 
 def calibrate_confidence(results: list) -> dict:
     """
-    Check if model confidence levels match actual hit rates for Reds picks.
-    Takes graded prediction_results with confidence and result fields.
-    Groups by spread_result, total_result, moneyline, and props.
-    Returns calibration report per bin with recommended adjustments.
+    Calculate hit rates per bet type from graded prediction_results.
+    Uses spread_result, total_result, moneyline_result (HIT/MISS/PUSH strings).
+    Reports: "Spread: X-Y (Z%), Total: X-Y (Z%), ML: X-Y (Z%)"
     """
-    # Overall confidence calibration across all bet types
-    bins_report = []
-
-    for low, high, label in CONFIDENCE_BINS:
-        bin_results = [
-            r for r in results
-            if r.get("confidence") is not None
-            and low <= float(r["confidence"]) < high
-            and r.get("ml_result") in ("HIT", "MISS")
-        ]
-
-        if not bin_results:
-            bins_report.append({
-                "bin": label,
-                "predicted": (low + high) / 2,
-                "actual": None,
-                "count": 0,
-                "adjustment": 0,
-            })
-            continue
-
-        total = len(bin_results)
-        wins = sum(1 for r in bin_results if r["ml_result"] == "HIT")
-        actual_rate = (wins / total) * 100
-        predicted_midpoint = (low + high) / 2
-        adjustment = round(actual_rate - predicted_midpoint, 1)
-
-        bins_report.append({
-            "bin": label,
-            "predicted": predicted_midpoint,
-            "actual": round(actual_rate, 1),
-            "count": total,
-            "adjustment": adjustment,
-        })
-
-    # Per-bet-type hit rates
-    bet_types = {
-        "spread": "spread_result",
-        "total": "total_result",
-        "moneyline": "ml_result",
+    report = {
+        "sample_size": len(results),
+        "spread": {"total": 0, "hits": 0, "misses": 0, "pushes": 0, "hit_rate": 0.0},
+        "total": {"total": 0, "hits": 0, "misses": 0, "pushes": 0, "hit_rate": 0.0},
+        "moneyline": {"total": 0, "hits": 0, "misses": 0, "pushes": 0, "hit_rate": 0.0},
+        "alerts": [],
     }
-    type_report = {}
-    for bet_name, field in bet_types.items():
-        typed = [r for r in results if r.get(field) in ("HIT", "MISS")]
-        if typed:
-            hits = sum(1 for r in typed if r[field] == "HIT")
-            type_report[bet_name] = {
-                "count": len(typed),
-                "hits": hits,
-                "hit_rate": round((hits / len(typed)) * 100, 1),
-            }
+
+    if not results:
+        report["alerts"].append("No prediction results found — nothing to calibrate")
+        return report
+
+    for market in ["spread", "total", "moneyline"]:
+        key = f"{market}_result"
+        resolved = [r for r in results if r.get(key)]
+        hits = sum(1 for r in resolved if r[key] == "HIT")
+        misses = sum(1 for r in resolved if r[key] == "MISS")
+        pushes = sum(1 for r in resolved if r[key] == "PUSH")
+
+        decided = hits + misses  # Exclude pushes from rate calc
+        hit_rate = (hits / decided * 100) if decided > 0 else 0.0
+
+        report[market] = {
+            "total": len(resolved),
+            "hits": hits,
+            "misses": misses,
+            "pushes": pushes,
+            "hit_rate": round(hit_rate, 1),
+        }
+
+        # Flag concerning drift
+        if decided >= 10:
+            if hit_rate < 45:
+                report["alerts"].append(
+                    f"{market.upper()} hit rate critically low at {hit_rate:.1f}% "
+                    f"({hits}-{misses}) — consider tightening edge thresholds"
+                )
+            elif hit_rate < 50:
+                report["alerts"].append(
+                    f"{market.upper()} hit rate below breakeven at {hit_rate:.1f}% "
+                    f"({hits}-{misses}) — monitor closely"
+                )
+            elif hit_rate >= 55:
+                report["alerts"].append(
+                    f"{market.upper()} performing well at {hit_rate:.1f}% "
+                    f"({hits}-{misses}) — current approach is effective"
+                )
+
+    # Recent trend analysis (last 10 resolved games)
+    recent = sorted(
+        [r for r in results if r.get("game_date")],
+        key=lambda r: r["game_date"],
+        reverse=True,
+    )[:10]
+
+    if len(recent) >= 5:
+        recent_spread_hits = sum(1 for r in recent if r.get("spread_result") == "HIT")
+        recent_spread_total = sum(1 for r in recent if r.get("spread_result") in ("HIT", "MISS"))
+        if recent_spread_total >= 5:
+            recent_rate = recent_spread_hits / recent_spread_total * 100
+            if recent_rate < 40:
+                report["alerts"].append(
+                    f"TREND: Last {recent_spread_total} spread picks hitting only {recent_rate:.0f}% — "
+                    f"cold streak detected"
+                )
+
+    return report
+
+
+def calculate_roi(results: list) -> dict:
+    """
+    Calculate overall ROI across all resolved spread/total/ML picks at -110 juice.
+    No edge filtering — just raw hit rates and profit/loss tracking.
+    """
+    WIN_PAYOUT = 100 / 110  # 0.909 at -110
+
+    markets = {}
+    total_wins = 0
+    total_losses = 0
+
+    for market in ["spread", "total", "moneyline"]:
+        key = f"{market}_result"
+        hits = sum(1 for r in results if r.get(key) == "HIT")
+        misses = sum(1 for r in results if r.get(key) == "MISS")
+        bets = hits + misses
+
+        if bets > 0:
+            hit_rate = round(hits / bets * 100, 1)
+            profit = round((hits * WIN_PAYOUT) - misses, 2)
+            roi = round(profit / bets * 100, 1)
         else:
-            type_report[bet_name] = {"count": 0, "hits": 0, "hit_rate": None}
+            hit_rate = 0.0
+            profit = 0.0
+            roi = 0.0
 
-    # Props hit rate (if prop_results field exists)
-    prop_results = [r for r in results if r.get("prop_result") in ("HIT", "MISS")]
-    if prop_results:
-        prop_hits = sum(1 for r in prop_results if r["prop_result"] == "HIT")
-        type_report["props"] = {
-            "count": len(prop_results),
-            "hits": prop_hits,
-            "hit_rate": round((prop_hits / len(prop_results)) * 100, 1),
+        markets[market] = {
+            "bets": bets,
+            "hits": hits,
+            "misses": misses,
+            "hit_rate": hit_rate,
+            "profit_units": profit,
+            "roi_pct": roi,
         }
+        total_wins += hits
+        total_losses += misses
 
-    # Flag bins that are consistently off by >3%
-    needs_adjustment = [b for b in bins_report if abs(b["adjustment"]) > 3 and b["count"] >= 5]
+    total_bets = total_wins + total_losses
+    if total_bets > 0:
+        overall_profit = round((total_wins * WIN_PAYOUT) - total_losses, 2)
+        overall_roi = round(overall_profit / total_bets * 100, 1)
+        overall_hit_rate = round(total_wins / total_bets * 100, 1)
+    else:
+        overall_profit = 0.0
+        overall_roi = 0.0
+        overall_hit_rate = 0.0
 
-    report = {
-        "bins": bins_report,
-        "bet_type_accuracy": type_report,
-        "total_graded": sum(b["count"] for b in bins_report),
-        "needs_adjustment": needs_adjustment,
-        "calibrated": len(needs_adjustment) == 0,
+    recommendations = []
+    if total_bets >= 10:
+        if overall_roi > 0:
+            recommendations.append(
+                f"Overall profitable: {overall_hit_rate}% hit rate, "
+                f"+{overall_roi}% ROI on {total_bets} bets"
+            )
+        else:
+            recommendations.append(
+                f"Overall unprofitable: {overall_hit_rate}% hit rate, "
+                f"{overall_roi}% ROI on {total_bets} bets — review model inputs"
+            )
+
+        # Flag any market that's dragging performance down
+        for mkt, data in markets.items():
+            if data["bets"] >= 5 and data["hit_rate"] < 48:
+                recommendations.append(
+                    f"{mkt.upper()} underperforming at {data['hit_rate']}% "
+                    f"({data['hits']}-{data['misses']}) — consider adjustments"
+                )
+
+    return {
+        "markets": markets,
+        "overall": {
+            "bets": total_bets,
+            "wins": total_wins,
+            "losses": total_losses,
+            "hit_rate": overall_hit_rate,
+            "profit_units": overall_profit,
+            "roi_pct": overall_roi,
+        },
+        "recommendations": recommendations,
     }
-    logger.info(f"Calibration report: {len(needs_adjustment)} bins need adjustment")
-    return report
-
-
-def optimize_edge_thresholds(results: list) -> dict:
-    """
-    Find optimal edge % cutoffs for STRONG/LEAN/SKIP by simulating ROI
-    on Reds picks. Takes graded results with 'best_edge' and 'ml_result'.
-    Returns optimal thresholds and ROI at each level.
-    """
-    # Filter to results with valid edge and outcome
-    valid = [
-        r for r in results
-        if r.get("best_edge") is not None
-        and r.get("ml_result") in ("HIT", "MISS")
-    ]
-
-    if len(valid) < 20:
-        return {
-            "error": "Not enough graded results for edge optimization",
-            "count": len(valid),
-        }
-
-    # Simulate ROI at each edge threshold
-    # Assume flat -110 juice (risk 110 to win 100) for simplicity
-    threshold_results = []
-    for threshold in EDGE_THRESHOLDS:
-        picks = [r for r in valid if float(r["best_edge"]) >= threshold]
-        if not picks:
-            threshold_results.append({
-                "threshold": threshold,
-                "picks": 0,
-                "wins": 0,
-                "losses": 0,
-                "roi": 0,
-            })
-            continue
-
-        wins = sum(1 for r in picks if r["ml_result"] == "HIT")
-        losses = len(picks) - wins
-        # ROI at -110: win = +100, loss = -110
-        profit = (wins * 100) - (losses * 110)
-        total_risked = len(picks) * 110
-        roi = round((profit / total_risked) * 100, 1) if total_risked > 0 else 0
-
-        threshold_results.append({
-            "threshold": threshold,
-            "picks": len(picks),
-            "wins": wins,
-            "losses": losses,
-            "roi": roi,
-            "win_pct": round((wins / len(picks)) * 100, 1),
-        })
-
-    # Find optimal thresholds
-    best = max(threshold_results, key=lambda x: x["roi"]) if threshold_results else {}
-
-    # STRONG = highest ROI with >= 10 picks
-    strong_candidates = [t for t in threshold_results if t["picks"] >= 10]
-    optimal_strong = max(strong_candidates, key=lambda x: x["roi"])["threshold"] if strong_candidates else 10.0
-
-    # LEAN = highest ROI threshold that has >= 25 picks
-    lean_candidates = [t for t in threshold_results if t["picks"] >= 25]
-    optimal_lean = max(lean_candidates, key=lambda x: x["roi"])["threshold"] if lean_candidates else 5.0
-
-    report = {
-        "optimal_strong": optimal_strong,
-        "optimal_lean": optimal_lean,
-        "optimal_skip_below": optimal_lean,
-        "roi_at_optimal": best.get("roi", 0) if best else 0,
-        "threshold_breakdown": threshold_results,
-        "total_picks_analyzed": len(valid),
-    }
-    logger.info(f"Edge optimization: STRONG >= {optimal_strong}%, LEAN >= {optimal_lean}%")
-    return report
 
 
 async def run_self_improvement() -> dict:
     """
     Main entry point for RedsHub self-improvement.
     1. Load prediction results from Supabase (site_id='redshub')
-    2. Calibrate confidence levels
-    3. Optimize edge thresholds
+    2. Calculate hit rates per bet type
+    3. Calculate ROI
+    4. Load prop results for additional context
     Returns report with recommendations.
     """
     from app.db import get_supabase
 
+    db = get_supabase()
+    if not db:
+        return {"error": "No database connection"}
+
+    # Load prediction results
+    results = []
+    try:
+        resp = db.table("prediction_results").select("*").eq("site_id", SITE_ID).execute()
+        results = resp.data or []
+        logger.info(f"Loaded {len(results)} Reds prediction results for self-improvement")
+    except Exception as e:
+        logger.error(f"Failed to load prediction results: {e}")
+        return {"error": f"Failed to load results: {e}"}
+
+    if not results:
+        logger.info("Self-improvement: no prediction results yet — skipping")
+        return {"status": "skipped", "reason": "No prediction results available"}
+
+    # Load prop results for additional context
+    try:
+        props = db.table("prop_results").select("*").eq("site_id", SITE_ID).execute()
+        prop_results = props.data or []
+    except Exception:
+        prop_results = []
+
+    # Run calibration (hit rates per bet type)
+    calibration = calibrate_confidence(results)
+    logger.info(f"Calibration complete: {calibration['spread']['hit_rate']}% spread, "
+                f"{calibration['total']['hit_rate']}% total, "
+                f"{calibration['moneyline']['hit_rate']}% ML")
+
+    # Run ROI calculation
+    roi = calculate_roi(results)
+    logger.info(f"ROI complete: {roi['overall']['hit_rate']}% hit rate, "
+                f"{roi['overall']['roi_pct']}% ROI on {roi['overall']['bets']} bets")
+
+    # Prop performance summary
+    prop_summary = {"total": 0, "hits": 0, "hit_rate": 0.0}
+    if prop_results:
+        prop_hits = sum(1 for p in prop_results if p.get("result") == "HIT")
+        prop_resolved = sum(1 for p in prop_results if p.get("result") in ("HIT", "MISS"))
+        prop_summary = {
+            "total": len(prop_results),
+            "resolved": prop_resolved,
+            "hits": prop_hits,
+            "hit_rate": round(prop_hits / prop_resolved * 100, 1) if prop_resolved > 0 else 0.0,
+        }
+
     report = {
+        "status": "completed",
         "site_id": SITE_ID,
-        "timestamp": datetime.utcnow().isoformat(),
-        "calibration": None,
-        "edge_optimization": None,
+        "run_date": datetime.utcnow().isoformat(),
+        "prediction_sample_size": len(results),
+        "prop_sample_size": len(prop_results),
+        "calibration": calibration,
+        "roi": roi,
+        "prop_summary": prop_summary,
+        "all_recommendations": (
+            calibration.get("alerts", []) +
+            roi.get("recommendations", [])
+        ),
     }
 
-    # Load prediction results from Supabase
-    db = get_supabase()
-    results = []
-    if db:
-        try:
-            resp = db.table("prediction_results").select("*").eq("site_id", SITE_ID).execute()
-            results = resp.data or []
-            logger.info(f"Loaded {len(results)} Reds prediction results for self-improvement")
-        except Exception as e:
-            logger.error(f"Failed to load prediction results: {e}")
-
-    if len(results) < 50:
-        logger.info(f"Only {len(results)} results — need 50+ for calibration/optimization, skipping")
-        report["calibration"] = {"skipped": True, "reason": f"Only {len(results)} results (need 50+)"}
-        report["edge_optimization"] = {"skipped": True, "reason": f"Only {len(results)} results (need 50+)"}
-    else:
-        # Confidence calibration
-        report["calibration"] = calibrate_confidence(results)
-
-        # Edge threshold optimization
-        report["edge_optimization"] = optimize_edge_thresholds(results)
-
-    logger.info(f"Self-improvement run complete: {json.dumps(report, default=str)[:500]}")
+    logger.info(
+        f"Self-improvement report: {len(report['all_recommendations'])} recommendations, "
+        f"{report['prediction_sample_size']} predictions analyzed"
+    )
     return report
