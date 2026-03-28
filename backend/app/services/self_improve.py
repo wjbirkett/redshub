@@ -13,6 +13,16 @@ logger = logging.getLogger(__name__)
 SITE_ID = "redshub"
 
 
+def _ml_profit(ml_odds):
+    """Calculate profit per unit risked for a moneyline bet.
+    Returns multiplier: e.g. +250 -> 2.5, -200 -> 0.5, None -> flat -110."""
+    if ml_odds is None:
+        return 100 / 110  # flat -110
+    if ml_odds > 0:
+        return ml_odds / 100
+    return 100 / abs(ml_odds)
+
+
 def calibrate_confidence(results: list) -> dict:
     """
     Calculate hit rates per bet type from graded prediction_results.
@@ -90,24 +100,64 @@ def calibrate_confidence(results: list) -> dict:
 
 def calculate_roi(results: list) -> dict:
     """
-    Calculate overall ROI across all resolved spread/total/ML picks at -110 juice.
-    No edge filtering — just raw hit rates and profit/loss tracking.
+    Calculate overall ROI across all resolved spread/total/ML picks.
+    Uses actual ml_odds for moneyline profit when available, falls back to -110.
+    Tracks value picks (plus odds) vs chalk picks (minus odds) separately for ML.
     """
-    WIN_PAYOUT = 100 / 110  # 0.909 at -110
+    FLAT_PAYOUT = 100 / 110  # 0.909 at -110
 
     markets = {}
-    total_wins = 0
-    total_losses = 0
+    total_profit = 0.0
+    total_bets_count = 0
+
+    # Value vs chalk tracking for moneyline
+    value_picks = {"bets": 0, "hits": 0, "misses": 0, "profit": 0.0}
+    chalk_picks = {"bets": 0, "hits": 0, "misses": 0, "profit": 0.0}
 
     for market in ["spread", "total", "moneyline"]:
         key = f"{market}_result"
-        hits = sum(1 for r in results if r.get(key) == "HIT")
-        misses = sum(1 for r in results if r.get(key) == "MISS")
+        resolved = [r for r in results if r.get(key) in ("HIT", "MISS")]
+        hits = sum(1 for r in resolved if r[key] == "HIT")
+        misses = len(resolved) - hits
         bets = hits + misses
 
-        if bets > 0:
+        if market == "moneyline" and bets > 0:
+            # Odds-aware profit for moneyline
+            profit = 0.0
+            for r in resolved:
+                odds = r.get("ml_odds")
+                payout = _ml_profit(odds)
+                is_value = odds is not None and odds > 0
+                is_chalk = odds is not None and odds < -130
+
+                if r[key] == "HIT":
+                    profit += payout
+                    if is_value:
+                        value_picks["hits"] += 1
+                        value_picks["profit"] += payout
+                    elif is_chalk:
+                        chalk_picks["hits"] += 1
+                        chalk_picks["profit"] += payout
+                else:
+                    profit -= 1.0
+                    if is_value:
+                        value_picks["misses"] += 1
+                        value_picks["profit"] -= 1.0
+                    elif is_chalk:
+                        chalk_picks["misses"] += 1
+                        chalk_picks["profit"] -= 1.0
+
+                if is_value:
+                    value_picks["bets"] += 1
+                elif is_chalk:
+                    chalk_picks["bets"] += 1
+
+            profit = round(profit, 2)
             hit_rate = round(hits / bets * 100, 1)
-            profit = round((hits * WIN_PAYOUT) - misses, 2)
+            roi = round(profit / bets * 100, 1)
+        elif bets > 0:
+            hit_rate = round(hits / bets * 100, 1)
+            profit = round((hits * FLAT_PAYOUT) - misses, 2)
             roi = round(profit / bets * 100, 1)
         else:
             hit_rate = 0.0
@@ -122,30 +172,30 @@ def calculate_roi(results: list) -> dict:
             "profit_units": profit,
             "roi_pct": roi,
         }
-        total_wins += hits
-        total_losses += misses
+        total_profit += profit
+        total_bets_count += bets
 
-    total_bets = total_wins + total_losses
-    if total_bets > 0:
-        overall_profit = round((total_wins * WIN_PAYOUT) - total_losses, 2)
-        overall_roi = round(overall_profit / total_bets * 100, 1)
-        overall_hit_rate = round(total_wins / total_bets * 100, 1)
+    if total_bets_count > 0:
+        overall_roi = round(total_profit / total_bets_count * 100, 1)
+        overall_hit_rate = round(
+            sum(m["hits"] for m in markets.values()) /
+            sum(m["bets"] for m in markets.values() if m["bets"] > 0) * 100, 1
+        )
     else:
-        overall_profit = 0.0
         overall_roi = 0.0
         overall_hit_rate = 0.0
 
     recommendations = []
-    if total_bets >= 10:
+    if total_bets_count >= 10:
         if overall_roi > 0:
             recommendations.append(
                 f"Overall profitable: {overall_hit_rate}% hit rate, "
-                f"+{overall_roi}% ROI on {total_bets} bets"
+                f"+{overall_roi}% ROI on {total_bets_count} bets"
             )
         else:
             recommendations.append(
                 f"Overall unprofitable: {overall_hit_rate}% hit rate, "
-                f"{overall_roi}% ROI on {total_bets} bets — review model inputs"
+                f"{overall_roi}% ROI on {total_bets_count} bets — review model inputs"
             )
 
         # Flag any market that's dragging performance down
@@ -156,16 +206,37 @@ def calculate_roi(results: list) -> dict:
                     f"({data['hits']}-{data['misses']}) — consider adjustments"
                 )
 
+        # Value vs chalk analysis
+        if value_picks["bets"] >= 3:
+            vp_rate = round(value_picks["hits"] / value_picks["bets"] * 100, 1)
+            recommendations.append(
+                f"VALUE ML picks (plus odds): {value_picks['hits']}-{value_picks['misses']} "
+                f"({vp_rate}%), {value_picks['profit']:+.2f}u"
+            )
+        if chalk_picks["bets"] >= 3:
+            cp_rate = round(chalk_picks["hits"] / chalk_picks["bets"] * 100, 1)
+            recommendations.append(
+                f"CHALK ML picks (heavy favorites): {chalk_picks['hits']}-{chalk_picks['misses']} "
+                f"({cp_rate}%), {chalk_picks['profit']:+.2f}u"
+            )
+            if chalk_picks["profit"] < 0 and chalk_picks["bets"] >= 5:
+                recommendations.append(
+                    "Heavy favorite ML bets are bleeding units — "
+                    "consider skipping ML on lines worse than -150"
+                )
+
     return {
         "markets": markets,
         "overall": {
-            "bets": total_bets,
-            "wins": total_wins,
-            "losses": total_losses,
+            "bets": total_bets_count,
+            "wins": sum(m["hits"] for m in markets.values()),
+            "losses": sum(m["misses"] for m in markets.values()),
             "hit_rate": overall_hit_rate,
-            "profit_units": overall_profit,
+            "profit_units": round(total_profit, 2),
             "roi_pct": overall_roi,
         },
+        "value_picks": value_picks,
+        "chalk_picks": chalk_picks,
         "recommendations": recommendations,
     }
 

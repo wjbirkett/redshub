@@ -158,6 +158,24 @@ async def resolve_game_predictions(game_date: str) -> dict:
 
             if spread_result or total_result or ml_result:
                 opponent = result["away_team"] if "reds" in result["home_team"].lower() or "cincinnati" in result["home_team"].lower() else result["home_team"]
+
+                # Extract odds data from key_picks if available
+                ml_odds_raw = picks.get("ml_odds") or picks.get("moneyline_odds")
+                ml_odds = None
+                if ml_odds_raw is not None:
+                    try:
+                        ml_odds = int(float(str(ml_odds_raw)))
+                    except (ValueError, TypeError):
+                        ml_odds = None
+
+                spread_line_raw = picks.get("spread_line") or picks.get("spread")
+                spread_line = None
+                if spread_line_raw is not None:
+                    try:
+                        spread_line = float(str(spread_line_raw))
+                    except (ValueError, TypeError):
+                        spread_line = None
+
                 upsert_data = {
                     "slug":            article["slug"],
                     "game_date":       game_date,
@@ -171,6 +189,8 @@ async def resolve_game_predictions(game_date: str) -> dict:
                     "moneyline_pick":  picks.get("moneyline_pick"),
                     "moneyline_lean":  picks.get("moneyline_lean"),
                     "moneyline_result": ml_result,
+                    "ml_odds":         ml_odds,
+                    "spread_line":     spread_line,
                     "knicks_score":    reds_score,  # Field named after KnicksHub (shared DB schema) — stores Reds score
                     "opp_score":       opp_score,
                     "resolved_at":     datetime.now(timezone.utc).isoformat(),
