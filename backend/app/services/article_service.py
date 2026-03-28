@@ -362,6 +362,7 @@ PICKS_JSON_END"""
 async def generate_player_prop(
     player: str, home_team: str, away_team: str, game_date: str,
     player_stats: dict, injuries: list, top_stats: list, over_under: str,
+    forced_prop_type: str = None, forced_line: float = None, forced_direction: str = None,
 ) -> dict:
     stat_str = ""
     is_pitcher = False
@@ -395,7 +396,14 @@ async def generate_player_prop(
     except Exception:
         alt_props_block = ""
 
-    if is_pitcher:
+    if forced_prop_type and forced_line and forced_direction:
+        prop_instruction = (
+            f"REQUIRED PICK: {forced_direction} {forced_line} {forced_prop_type}.\n"
+            f"Our edge model identified this as the best-value prop. Write your analysis arguing "
+            f"why {forced_direction} {forced_line} {forced_prop_type} is the play.\n"
+            f"Reference relevant stats (wOBA, hard hit rate, barrel rate, BABIP, K%, platoon splits) to support this pick."
+        )
+    elif is_pitcher:
         prop_instruction = (
             f"This is a STARTING PITCHER prop. Focus on STRIKEOUTS (K's).\n"
             f"Pick a strikeout prop (e.g., Over/Under 5.5 strikeouts).\n"
@@ -551,6 +559,9 @@ async def generate_daily_props(
                     player=prop["player"], home_team=home_team, away_team=away_team,
                     game_date=game_date, player_stats=prop["player_stat"],
                     injuries=injuries, top_stats=top_stats, over_under=over_under,
+                    forced_prop_type=prop["prop_type"].replace("_", " ").title(),
+                    forced_line=prop["line"],
+                    forced_direction=prop["direction"],
                 )
                 art["edge_pct"] = prop["edge_pct"]
                 if prop.get("tier") == "LEAN":
