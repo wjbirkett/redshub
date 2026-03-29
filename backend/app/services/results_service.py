@@ -196,31 +196,52 @@ async def resolve_game_predictions(game_date: str) -> dict:
                     "resolved_at":     datetime.now(timezone.utc).isoformat(),
                     "site_id":         "redshub",
                 }
+                saved = False
+                slug = article["slug"]
                 try:
-                    # Check if exists first — upsert may fail on FK/conflict
-                    existing = db.table("prediction_results").select("slug").eq("slug", article["slug"]).execute()
+                    # Attempt 1: check-then-update-or-insert
+                    existing = db.table("prediction_results").select("slug").eq("slug", slug).execute()
                     if existing.data:
-                        db.table("prediction_results").update(upsert_data).eq("slug", article["slug"]).execute()
+                        db.table("prediction_results").update(upsert_data).eq("slug", slug).execute()
+                        logger.info(f"Updated prediction_results for {slug}")
                     else:
-                        db.table("prediction_results").upsert(upsert_data, on_conflict="slug")
-                    resolved += 1
+                        import httpx as _hx
+                        headers = {**db.headers, "Prefer": "return=representation"}
+                        r = _hx.post(f"{db.url}/rest/v1/prediction_results", headers=headers, json=upsert_data)
+                        if r.status_code >= 400:
+                            raise Exception(f"Insert failed ({r.status_code}): {r.text[:200]}")
+                        logger.info(f"Inserted prediction_results for {slug}")
+                    saved = True
                 except Exception as e2:
-                    logger.error(f"prediction_results save failed for {article.get('slug')}: {e2}")
-                    # Try without optional columns
+                    logger.error(f"prediction_results save attempt 1 failed for {slug}: {e2}")
+                    # Attempt 2: strip optional columns and retry
                     try:
-                        for k in ["moneyline_pick", "moneyline_lean", "moneyline_result", "site_id", "ml_odds"]:
-                            upsert_data.pop(k, None)
-                        if existing and existing.data:
-                            db.table("prediction_results").update(upsert_data).eq("slug", article["slug"]).execute()
+                        stripped = {k: v for k, v in upsert_data.items() if k not in ("moneyline_pick", "moneyline_lean", "moneyline_result", "site_id", "ml_odds")}
+                        existing2 = db.table("prediction_results").select("slug").eq("slug", slug).execute()
+                        if existing2.data:
+                            db.table("prediction_results").update(stripped).eq("slug", slug).execute()
                         else:
                             import httpx as _hx
                             headers = {**db.headers, "Prefer": "return=representation"}
-                            r = _hx.post(f"{db.url}/rest/v1/prediction_results", headers=headers, json=upsert_data)
+                            r = _hx.post(f"{db.url}/rest/v1/prediction_results", headers=headers, json=stripped)
                             if r.status_code >= 400:
-                                logger.error(f"Insert also failed ({r.status_code}): {r.text[:200]}")
-                        resolved += 1
+                                raise Exception(f"Stripped insert failed ({r.status_code}): {r.text[:200]}")
+                        logger.info(f"Saved prediction_results (stripped) for {slug}")
+                        saved = True
                     except Exception as e3:
-                        logger.error(f"All save attempts failed for {article.get('slug')}: {e3}")
+                        logger.error(f"All save attempts failed for {slug}: {e3}")
+
+                # Verify the save by querying back
+                if saved:
+                    verify = db.table("prediction_results").select("slug").eq("slug", slug).execute()
+                    if not verify.data:
+                        logger.error(f"VERIFICATION FAILED: {slug} not found after save")
+                        saved = False
+
+                if saved:
+                    resolved += 1
+                else:
+                    logger.error(f"prediction_results NOT saved for {slug}")
 
     # ── Prop grading ──────────────────────────────────────────────────────────
     # MLB stat label mapping from ESPN box score to prop_type keys
