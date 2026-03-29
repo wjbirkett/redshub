@@ -74,6 +74,24 @@ export default function App() {
                 <Route path="/privacy"                 element={<PrivacyPage />} />
               </Routes>
             </div>
+
+            {/* Book Promo */}
+            <a
+              href="https://www.amazon.com/dp/B0GTC3T8X6"
+              target="_blank"
+              rel="noopener noreferrer"
+              style={{ textDecoration: "none", display: "block", margin: "2rem 0 0" }}
+            >
+              <div style={{ background: "#161b22", border: "1px solid #C6011F", borderRadius: "0.5rem", padding: "0.75rem 1.25rem", display: "flex", alignItems: "center", gap: "1rem", flexWrap: "wrap", cursor: "pointer" }}>
+                <span style={{ fontSize: "1.25rem" }}>📖</span>
+                <div style={{ flex: 1, minWidth: "200px" }}>
+                  <span style={{ color: "#C6011F", fontWeight: 700, fontSize: "0.85rem", letterSpacing: "0.05em" }}>AI SPORTS BETTING</span>
+                  <span style={{ color: "#9ca3af", fontSize: "0.75rem", marginLeft: "0.5rem" }}>The complete guide to AI-powered betting predictions</span>
+                  <span style={{ color: "#6b7280", fontSize: "0.75rem", marginLeft: "0.5rem" }}>by Willie Birkett</span>
+                </div>
+                <span style={{ background: "#C6011F", color: "#fff", fontWeight: 700, fontSize: "0.75rem", padding: "0.4rem 0.9rem", borderRadius: "0.25rem", whiteSpace: "nowrap" }}>GET IT ON AMAZON →</span>
+              </div>
+            </a>
           </main>
         </div>
       </BrowserRouter>
