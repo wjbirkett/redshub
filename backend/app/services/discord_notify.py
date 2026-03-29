@@ -9,10 +9,7 @@ from datetime import date, datetime, timedelta, timezone
 
 logger = logging.getLogger(__name__)
 
-WEBHOOK = os.environ.get(
-    "DISCORD_WEBHOOK_URL",
-    "https://discord.com/api/webhooks/1487607206353567895/vdZXQMOjesj4Cg5DNBCufcqefPn-OU2J8UZPGLjfQbu1hV9PIIFgKM70NRxtIZKl_swl",
-)
+WEBHOOK = os.environ.get("DISCORD_WEBHOOK_URL", "")
 
 
 async def send_redshub_recap():
