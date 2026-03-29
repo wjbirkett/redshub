@@ -751,35 +751,57 @@ async def generate_postgame_analysis(game_date: str) -> dict:
 
             if pred_rows:
                 reds_won = reds_score > opp_score
+                actual_total = reds_score + opp_score
                 grade_lines = []
-                for row in pred_rows:
-                    picks = row.get("key_picks") or {}
-                    if not picks:
-                        continue
+                graded = set()  # Prevent duplicate grades from prediction + best_bet
+
+                # Use first article's picks only (prediction takes priority)
+                picks = pred_rows[0].get("key_picks") or {}
+                if picks:
                     # Grade spread / run line
                     spread_lean = picks.get("spread_lean", "")
                     spread_pick = picks.get("spread_pick", "")
-                    if spread_lean and spread_pick:
-                        # Simple heuristic: COVER = Reds win (or within spread), FADE = opponent
+                    if spread_lean and spread_pick and "spread" not in graded:
+                        graded.add("spread")
                         covered = reds_won if spread_lean == "COVER" else not reds_won
                         grade_lines.append(f"- Run Line ({spread_pick}): {'WIN' if covered else 'LOSS'}")
+
                     # Grade moneyline
                     ml_lean = picks.get("moneyline_lean", "")
-                    if ml_lean:
-                        ml_correct = (ml_lean.lower() == "reds" and reds_won) or (ml_lean.lower() != "reds" and not reds_won)
-                        grade_lines.append(f"- Moneyline ({ml_lean}): {'WIN' if ml_correct else 'LOSS'}")
+                    if ml_lean and "ml" not in graded:
+                        graded.add("ml")
+                        ml_correct = (ml_lean.lower() in ("reds", "win") and reds_won) or (ml_lean.lower() in ("opponent", "loss") and not reds_won)
+                        ml_display = "Reds" if ml_lean.lower() in ("reds", "win") else opp_name
+                        grade_lines.append(f"- Moneyline ({ml_display}): {'WIN' if ml_correct else 'LOSS'}")
+
                     # Grade total
                     total_lean = picks.get("total_lean", "")
                     total_pick = picks.get("total_pick", "")
-                    if total_lean and total_pick:
-                        actual_total = reds_score + opp_score
-                        # Extract line from pick string e.g. "Over/Under 8.5"
+                    if total_lean and total_pick and "total" not in graded:
+                        graded.add("total")
                         ou_match = re.search(r"(\d+\.?\d*)", total_pick)
                         if ou_match:
                             ou_line = float(ou_match.group(1))
                             over_hit = actual_total > ou_line
                             lean_correct = (total_lean == "OVER" and over_hit) or (total_lean == "UNDER" and not over_hit)
                             grade_lines.append(f"- Total ({total_pick}, {total_lean}): actual {actual_total} — {'WIN' if lean_correct else 'LOSS'}")
+
+                # Grade props
+                try:
+                    prop_rows = db.table("prop_results").select("*").eq("game_date", game_date).eq("site_id", "redshub").execute()
+                    for pr in (prop_rows.data or []):
+                        player = pr.get("player", "")
+                        prop_type = pr.get("prop_type", "")
+                        line = pr.get("line")
+                        lean = pr.get("lean", "")
+                        actual = pr.get("actual_value")
+                        result = pr.get("result")
+                        if player and result:
+                            grade_lines.append(f"- {player} {lean} {line} {prop_type}: {result}" + (f" (actual: {actual})" if actual is not None else ""))
+                        elif player and line:
+                            grade_lines.append(f"- {player} {lean} {line} {prop_type}: pending")
+                except Exception:
+                    pass
 
                 if grade_lines:
                     picks_section = "\n\n## How Our Picks Did\n" + "\n".join(grade_lines)
