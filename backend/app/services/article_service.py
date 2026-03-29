@@ -14,11 +14,26 @@ RUN_LINE_LABEL = "run line"
 PROP_TYPES     = ["hits", "home runs", "strikeouts", "RBI", "total bases"]
 
 # Key Reds BATTERS for prop articles (position players only — no pitchers)
-PROP_PLAYERS = [
-    "Elly De La Cruz", "TJ Friedl", "Spencer Steer",
-    "Tyler Stephenson", "Jonathan India", "Jake Fraley",
-    "Jeimer Candelario", "Stuart Fairchild", "Santiago Espinal",
-]
+PROP_PLAYERS = []  # No longer hardcoded — pulled from active roster dynamically
+
+
+async def get_active_prop_players() -> list:
+    """Fetch active Reds position players from roster for prop generation."""
+    try:
+        from app.services.mlb_service import fetch_player_stats
+        stats = await fetch_player_stats()
+        # Get batters (non-pitchers) who have played
+        batters = [s.player_name for s in stats if s.at_bats and s.at_bats > 0]
+        if batters:
+            return batters[:12]  # Top 12 by games played
+    except Exception:
+        pass
+    # Fallback to a basic list if API fails
+    return [
+        "Elly De La Cruz", "TJ Friedl", "Spencer Steer",
+        "Tyler Stephenson", "Jonathan India", "Jake Fraley",
+        "Noelvi Marte", "Ke'Bryan Hayes", "Will Benson",
+    ]
 
 
 def slugify(text: str) -> str:
