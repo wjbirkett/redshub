@@ -197,10 +197,30 @@ async def resolve_game_predictions(game_date: str) -> dict:
                     "site_id":         "redshub",
                 }
                 try:
-                    db.table("prediction_results").upsert(upsert_data, on_conflict="slug")
+                    # Check if exists first — upsert may fail on FK/conflict
+                    existing = db.table("prediction_results").select("slug").eq("slug", article["slug"]).execute()
+                    if existing.data:
+                        db.table("prediction_results").update(upsert_data).eq("slug", article["slug"]).execute()
+                    else:
+                        db.table("prediction_results").upsert(upsert_data, on_conflict="slug")
                     resolved += 1
                 except Exception as e2:
-                    logger.error(f"prediction_results upsert failed for {article.get('slug')}: {e2}")
+                    logger.error(f"prediction_results save failed for {article.get('slug')}: {e2}")
+                    # Try without optional columns
+                    try:
+                        for k in ["moneyline_pick", "moneyline_lean", "moneyline_result", "site_id", "ml_odds"]:
+                            upsert_data.pop(k, None)
+                        if existing and existing.data:
+                            db.table("prediction_results").update(upsert_data).eq("slug", article["slug"]).execute()
+                        else:
+                            import httpx as _hx
+                            headers = {**db.headers, "Prefer": "return=representation"}
+                            r = _hx.post(f"{db.url}/rest/v1/prediction_results", headers=headers, json=upsert_data)
+                            if r.status_code >= 400:
+                                logger.error(f"Insert also failed ({r.status_code}): {r.text[:200]}")
+                        resolved += 1
+                    except Exception as e3:
+                        logger.error(f"All save attempts failed for {article.get('slug')}: {e3}")
 
     # ── Prop grading ──────────────────────────────────────────────────────────
     # MLB stat label mapping from ESPN box score to prop_type keys
