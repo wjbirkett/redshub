@@ -189,9 +189,7 @@ async def resolve_game_predictions(game_date: str) -> dict:
                     "moneyline_pick":  picks.get("moneyline_pick"),
                     "moneyline_lean":  picks.get("moneyline_lean"),
                     "moneyline_result": ml_result,
-                    "ml_odds":         ml_odds,
-                    "spread_line":     spread_line,
-                    "knicks_score":    reds_score,  # Field named after KnicksHub (shared DB schema) — stores Reds score
+                    "knicks_score":    reds_score,
                     "opp_score":       opp_score,
                     "resolved_at":     datetime.now(timezone.utc).isoformat(),
                     "site_id":         "redshub",
@@ -216,7 +214,7 @@ async def resolve_game_predictions(game_date: str) -> dict:
                     logger.error(f"prediction_results save attempt 1 failed for {slug}: {e2}")
                     # Attempt 2: strip optional columns and retry
                     try:
-                        stripped = {k: v for k, v in upsert_data.items() if k not in ("moneyline_pick", "moneyline_lean", "moneyline_result", "site_id", "ml_odds")}
+                        stripped = {k: v for k, v in upsert_data.items() if k not in ("moneyline_pick", "moneyline_lean", "moneyline_result", "site_id", "ml_odds", "spread_line")}
                         existing2 = db.table("prediction_results").select("slug").eq("slug", slug).execute()
                         if existing2.data:
                             db.table("prediction_results").update(stripped).eq("slug", slug).execute()
