@@ -272,6 +272,10 @@ def run_self_improvement():
     _run_async(rsi())
 
 
+def send_discord_recap():
+    from app.services.discord_notify import send_redshub_recap
+    _run_async(send_redshub_recap())
+
 def start_scheduler():
     _scheduler.add_job(refresh_news,              CronTrigger(minute="*/15"))
     _scheduler.add_job(refresh_injuries,          CronTrigger(hour="*/3"))
@@ -284,6 +288,8 @@ def start_scheduler():
     _scheduler.add_job(generate_postgame_article, CronTrigger(minute="*/15"))
     # Self-improvement: daily at 5am UTC (1hr after results resolver)
     _scheduler.add_job(run_self_improvement,      CronTrigger(hour=5, minute=0, timezone="UTC"))
+    # Discord morning recap: 11am ET (15:00 UTC)
+    _scheduler.add_job(send_discord_recap,        CronTrigger(hour=15, minute=0, timezone="UTC"))
     _scheduler.start()
     logger.info("RedsHub scheduler started")
 
