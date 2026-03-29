@@ -45,6 +45,7 @@ class Game(BaseModel):
     status: str
     arena: Optional[str] = None             # ballpark name
     broadcast: Optional[str] = None
+    game_datetime: Optional[str] = None     # full ISO UTC string from ESPN
 
 
 class TeamStanding(BaseModel):

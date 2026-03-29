@@ -130,6 +130,7 @@ async def fetch_schedule() -> List[Game]:
                 status=status,
                 arena=comp.get("venue", {}).get("fullName"),
                 broadcast=None,
+                game_datetime=raw_date,
             ))
         except Exception as e:
             logger.warning(f"Skipping game parse: {e}")

@@ -95,6 +95,7 @@ async def send_redshub_recap():
     try:
         from app.services.mlb_service import fetch_schedule
 
+        ET = timezone(timedelta(hours=-4))
         games_raw = await fetch_schedule()
         games = [g.model_dump() if hasattr(g, "model_dump") else g for g in games_raw]
         today = date.today()
@@ -113,9 +114,20 @@ async def send_redshub_recap():
         if upcoming:
             ng = upcoming[0]
             opp = ng.get("away_team") if "Reds" in ng.get("home_team", "") else ng.get("home_team", "")
-            gt = ng.get("game_time", "TBD")
             home_away = "vs" if "Reds" in ng.get("home_team", "") else "@"
-            next_game_line = f"\nNext game: Reds {home_away} {opp} at {gt} ET"
+
+            # Parse actual game time from ISO date string
+            raw_dt = ng.get("game_datetime", "")
+            time_str = "TBD"
+            if raw_dt:
+                try:
+                    game_time = datetime.fromisoformat(raw_dt.replace("Z", "+00:00")).astimezone(ET)
+                    time_str = game_time.strftime("%I:%M %p ET").lstrip("0")
+                except Exception:
+                    pass
+
+            next_game_line = f"\nNext game: Reds {home_away} {opp} at {time_str}"
+            next_game_line += "\nPicks drop ~45 min before first pitch"
     except Exception as e:
         logger.debug(f"Could not fetch next game for recap: {e}")
 
